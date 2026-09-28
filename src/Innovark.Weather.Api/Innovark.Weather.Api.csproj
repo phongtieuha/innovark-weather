@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Innovark.Weather.Application\Innovark.Weather.Application.csproj" />
+    <ProjectReference Include="..\Innovark.Weather.Infrastructure\Innovark.Weather.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Innovark.Weather.Api/Innovark.Weather.Api.csproj" />
+    <Project Path="src/Innovark.Weather.Application/Innovark.Weather.Application.csproj" />
+    <Project Path="src/Innovark.Weather.Infrastructure/Innovark.Weather.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Innovark.Weather.IntegrationTests/Innovark.Weather.IntegrationTests.csproj" />
+    <Project Path="tests/Innovark.Weather.UnitTests/Innovark.Weather.UnitTests.csproj" />
+  </Folder>
+</Solution>
