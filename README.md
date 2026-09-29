@@ -14,6 +14,15 @@ dotnet run --project src/Innovark.Weather.Api
 dotnet test
 ```
 
+The `scripts/` folder has shortcuts that work from any directory:
+
+| Script | Runs |
+|---|---|
+| `./scripts/run-tests.sh` | All offline tests. Explicit tests, such as the live Open-Meteo test, are skipped. |
+| `./scripts/run-tests-with-explicit.sh` | All tests, including explicit ones. Needs network access. |
+
+Extra arguments are passed to `dotnet test`, for example `./scripts/run-tests.sh -c Release`.
+
 ## Architecture
 
 ```
@@ -40,3 +49,11 @@ Api ──► Infrastructure ──► Application
 | **Application** | Request validation (not in the future, not older than 72 hours, fixed UTC+7), the weather history use case (10-hour window, completeness check, °C→°F, newest first), response models, and the `IOpenMeteoClient` interface | `HttpClient`, `HttpContext`, Open-Meteo's JSON format |
 | **Infrastructure** | The typed `HttpClient` for Open-Meteo: builds the query, reads the JSON response, parses upstream errors, options with startup validation, resilience policies | Business rules or HTTP request handling |
 | **Api** | Minimal API endpoints, snake_case JSON, OpenAPI docs, exceptions mapped to ProblemDetails (400/502/503/500), dependency registration, health check, hosting settings for ECS | Business rules or Open-Meteo details; endpoints only bind input, call the service and return the result |
+
+## Editor
+
+This project is developed in [Visual Studio Code](https://code.visualstudio.com/) with the [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit) extension. The shared workspace settings in `.vscode/settings.json` turn on Explorer file nesting, for example grouping `appsettings.*.json` under `appsettings.json`. Any editor that supports the .NET 10 SDK works; the build and tests run from the command line.
+
+## Disclaimer
+
+GitHub Copilot is used in this project.
