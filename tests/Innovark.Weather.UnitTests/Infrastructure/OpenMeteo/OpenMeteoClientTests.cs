@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Web;
+using Innovark.Weather.Application.Models;
 using Innovark.Weather.Infrastructure.OpenMeteo;
 using Microsoft.Extensions.Options;
 using Shouldly;
@@ -200,7 +201,7 @@ public class OpenMeteoClientTests
 
     private static DateTimeOffset At(int day, int hour) => new(2026, 9, day, hour, 0, 0, Plus7);
 
-    private static async Task<IReadOnlyList<Application.Models.HourlyWeather>> GetHourlyAsync(
+    private static async Task<IReadOnlyList<HourlyWeather>> GetHourlyAsync(
         StubHttpMessageHandler handler, DateTimeOffset windowStart, DateTimeOffset windowEnd)
     {
         using var httpClient = new HttpClient(handler) { BaseAddress = BaseUrl };
