@@ -45,5 +45,5 @@ public sealed class HistoryRequestValidator(TimeProvider timeProvider)
     // e.g. 2026-09-28T18:00+07:00. Built from the local clock value, since extreme dates cannot be
     // represented as a DateTimeOffset.
     private static string Format(DateTime localTime) =>
-        string.Create(CultureInfo.InvariantCulture, $"{localTime:yyyy-MM-dd'T'HH:mm}+{TimeZones.Vietnam:hh\\:mm}");
+        localTime.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture) + TimeZones.VietnamOffsetText;
 }

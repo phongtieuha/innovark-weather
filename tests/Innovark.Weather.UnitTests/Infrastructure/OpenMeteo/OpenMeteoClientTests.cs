@@ -69,6 +69,16 @@ public class OpenMeteoClientTests
         query["end_date"].ShouldBe("2026-09-28");
     }
 
+    [Fact]
+    public void Location_ReturnsConfiguredCoordinates()
+    {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture));
+
+        var client = new OpenMeteoClient(httpClient, CreateOptions());
+
+        client.Location.ShouldBe(new WeatherLocation(10.762622, 106.660172));
+    }
+
     // --- Response mapping ---
 
     [Fact]
@@ -205,15 +215,17 @@ public class OpenMeteoClientTests
         StubHttpMessageHandler handler, DateTimeOffset windowStart, DateTimeOffset windowEnd)
     {
         using var httpClient = new HttpClient(handler) { BaseAddress = BaseUrl };
-        var options = Options.Create(new OpenMeteoOptions
+
+        return await new OpenMeteoClient(httpClient, CreateOptions()).GetHourlyAsync(windowStart, windowEnd, Ct);
+    }
+
+    private static IOptions<OpenMeteoOptions> CreateOptions() =>
+        Options.Create(new OpenMeteoOptions
         {
             BaseUrl = BaseUrl,
             Latitude = 10.762622,
             Longitude = 106.660172,
         });
-
-        return await new OpenMeteoClient(httpClient, options).GetHourlyAsync(windowStart, windowEnd, Ct);
-    }
 
     private static string HourlyJson(string[] times, string temperatures, string humidities, int utcOffsetSeconds = 25200) =>
         $$"""

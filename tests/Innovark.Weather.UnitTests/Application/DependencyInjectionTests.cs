@@ -1,4 +1,5 @@
 using Innovark.Weather.Application;
+using Innovark.Weather.Application.Services;
 using Innovark.Weather.Application.Validation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -15,6 +16,16 @@ public class DependencyInjectionTests
 
         provider.GetRequiredService<HistoryRequestValidator>().ShouldNotBeNull();
         provider.GetRequiredService<TimeProvider>().ShouldBeSameAs(TimeProvider.System);
+    }
+
+    [Fact]
+    public void AddApplication_RegistersHistoryServiceAsScoped()
+    {
+        // Scoped, because it depends on the transient typed HttpClient behind IOpenMeteoClient.
+        var descriptor = new ServiceCollection().AddApplication()
+            .Single(d => d.ServiceType == typeof(WeatherHistoryService));
+
+        descriptor.Lifetime.ShouldBe(ServiceLifetime.Scoped);
     }
 
     [Fact]

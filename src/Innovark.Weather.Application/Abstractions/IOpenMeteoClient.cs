@@ -5,6 +5,9 @@ namespace Innovark.Weather.Application.Abstractions;
 /// <summary>Source of hourly weather data for the configured location.</summary>
 public interface IOpenMeteoClient
 {
+    /// <summary>The configured coordinates all data is fetched for.</summary>
+    WeatherLocation Location { get; }
+
     /// <summary>
     /// Gets the hours from <paramref name="windowStart"/> to <paramref name="windowEnd"/>, both inclusive,
     /// oldest first. The caller works out this window from the requested date and hour.

@@ -20,6 +20,9 @@ internal sealed class OpenMeteoClient(HttpClient httpClient, IOptions<OpenMeteoO
 
     private readonly OpenMeteoOptions _options = options.Value;
 
+    // Latitude and Longitude are required and range-checked at startup (ValidateOnStart).
+    public WeatherLocation Location => new(_options.Latitude!.Value, _options.Longitude!.Value);
+
     public async Task<IReadOnlyList<HourlyWeather>> GetHourlyAsync(
         DateTimeOffset windowStart, DateTimeOffset windowEnd, CancellationToken ct)
     {
@@ -52,8 +55,8 @@ internal sealed class OpenMeteoClient(HttpClient httpClient, IOptions<OpenMeteoO
     {
         (string Name, string Value)[] parameters =
         [
-            ("latitude", _options.Latitude!.Value.ToString(CultureInfo.InvariantCulture)),
-            ("longitude", _options.Longitude!.Value.ToString(CultureInfo.InvariantCulture)),
+            ("latitude", Location.Latitude.ToString(CultureInfo.InvariantCulture)),
+            ("longitude", Location.Longitude.ToString(CultureInfo.InvariantCulture)),
             ("hourly", HourlyFields),
             ("timezone", TimeZoneId),
             ("start_date", FormatLocalDate(windowStart)),

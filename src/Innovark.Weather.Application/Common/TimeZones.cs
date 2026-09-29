@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Innovark.Weather.Application.Common;
 
 public static class TimeZones
@@ -10,4 +12,8 @@ public static class TimeZones
     /// <see cref="TimeZoneInfo"/>: chiseled container images ship without tzdata.
     /// </summary>
     public static readonly TimeSpan Vietnam = TimeSpan.FromHours(7);
+
+    /// <summary>Vietnam's UTC offset as ISO 8601 text: <c>+07:00</c>.</summary>
+    public static readonly string VietnamOffsetText =
+        DateTimeOffset.UnixEpoch.ToOffset(Vietnam).ToString("zzz", CultureInfo.InvariantCulture);
 }
