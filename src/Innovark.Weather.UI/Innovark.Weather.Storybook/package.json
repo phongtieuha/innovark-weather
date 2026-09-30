@@ -1,0 +1,38 @@
+{
+  "name": "innovark-weather-storybook",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "check-types": "tsc --noEmit",
+    "test": "vitest run --project storybook"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
+    "@innovark-weather/components": "workspace:*",
+    "@tanstack/react-query": "^5.102.8",
+    "lucide-react": "^1.31.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7.87.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "^10.5.8",
+    "@storybook/addon-docs": "^10.5.8",
+    "@storybook/addon-vitest": "^10.5.8",
+    "@storybook/react-vite": "^10.5.8",
+    "@vitest/browser-playwright": "^4.1.11",
+    "msw": "^2.15.0",
+    "msw-storybook-addon": "^3.0.0",
+    "playwright": "^1.63.0",
+    "storybook": "^10.5.8"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}

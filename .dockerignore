@@ -1,6 +1,8 @@
 # Only src/ and the root build files are needed to build the image.
 **/bin/
 **/obj/
+**/node_modules/
+**/wwwroot/js/build/
 .git/
 .github/
 .vs/

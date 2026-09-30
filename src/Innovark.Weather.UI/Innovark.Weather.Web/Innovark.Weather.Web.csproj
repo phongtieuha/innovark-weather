@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Output of an earlier client build; excluded from the default glob so stale hashed files never
+       reach the manifest. ClientBuild adds the current ones. -->
+  <ItemGroup>
+    <Content Remove="wwwroot/js/build/**" />
+  </ItemGroup>
+
+  <!-- Vite writes the client bundle to wwwroot/js/build in Release. The SDK's static web assets
+       manifest (which MapStaticAssets serves from) is built from @(Content), a glob evaluated before
+       any target runs, so files generated during the build would be missing from it and 404. Adding
+       them as Content inside the target re-scans the disk after the build. -->
+  <Target Name="ClientBuild" BeforeTargets="ResolveProjectStaticWebAssets" Condition="'$(Configuration)' == 'Release'">
+    <Exec Command="bun run build" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <ItemGroup>
+      <Content Include="wwwroot/js/build/**" />
+    </ItemGroup>
+  </Target>
+
+</Project>

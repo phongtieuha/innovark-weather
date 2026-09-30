@@ -4,7 +4,7 @@
 
 A .NET 10 Web API that returns 10 hourly weather records for Ho Chi Minh City (10.762622, 106.660172) from Open-Meteo's [Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api): the requested hour and the 9 hours before it, newest first. The date and hour are given in UTC+7 and may be up to 3 days in the past. Each record has the temperature in °C and °F and the relative humidity.
 
-**Contents:** [Demo](#demo) · [Getting started](#getting-started) · [Approach](#approach) · [API](#api) · [Design decisions](#design-decisions) · [Architecture](#architecture) · [Resilience and caching](#resilience-and-caching) · [Logging](#logging) · [Testing](#testing) · [Container](#container) · [Code quality](#code-quality) · [Security](#security) · [Further considerations](#further-considerations) · [Editor](#editor) · [Disclaimer](#disclaimer)
+**Contents:** [Demo](#demo) · [Getting started](#getting-started) · [Approach](#approach) · [API](#api) · [Web](#web) · [Design decisions](#design-decisions) · [Architecture](#architecture) · [Resilience and caching](#resilience-and-caching) · [Logging](#logging) · [Testing](#testing) · [Container](#container) · [Code quality](#code-quality) · [Security](#security) · [Further considerations](#further-considerations) · [Editor](#editor) · [Disclaimer](#disclaimer)
 
 ## Demo
 
@@ -23,6 +23,9 @@ Requires the .NET 10 SDK, or only Docker to run the container.
 
 # Run the tests with live
 ./scripts/run-tests-with-explicit.sh
+
+# Run the web app on http://localhost:5048 (needs bun; installs packages on first run)
+./scripts/run-web.sh
 
 # Or run the container on the same port (Scalar UI at http://localhost:5122/scalar)
 docker compose up --build
@@ -80,6 +83,28 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) ProblemDetails wit
 
 Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /openapi/v1.json`. Sample requests are in `src/Innovark.Weather.Api/Innovark.Weather.Api.http`.
 
+## Web
+
+A one-page web app for the same request: a form with a date and an hour (UTC+7), validated in the browser with the API's rules, and a **Send** button. It posts to its own placeholder endpoint, `POST /api/weather/history`, which returns 200 OK with the input it received. It is not yet wired to the API.
+
+```bash
+./scripts/run-web.sh    # Vite dev server (:5173) + dotnet watch (:5048)
+
+cd src/Innovark.Weather.UI
+bun install                                          # once: installs the three workspace packages
+bun run --cwd Innovark.Weather.Storybook storybook   # Storybook on http://localhost:6006
+bun run --cwd Innovark.Weather.Storybook test        # every story as a test, in headless Chromium
+bun run format:check                                 # Prettier, for the three packages only
+```
+
+| Package                       | What it is                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Innovark.Weather.Web`        | ASP.NET Core Razor Pages host. Each page (`Pages/Home/Home.cshtml`) mounts a React app from the `.ts` file of the same name: from the Vite dev server in Development, and from the hashed bundle in `wwwroot/js/build` otherwise (a Release build runs `bun run build`).                                                                                      |
+| `Innovark.Weather.Components` | `@innovark-weather/components`: [shadcn/ui](https://ui.shadcn.com) components with the default theme and fonts, a `DatePicker`, and form helpers: `ControlledField` (a react-hook-form field with a collapsing error), `useApiCall` (requests that return ProblemDetails), and `useFormAction` (the result alert). Shipped as TSX source, with no build step. |
+| `Innovark.Weather.Storybook`  | Stories for every component. API calls are answered by MSW, with one story per outcome (200, 400, 500, network error). Every story runs as a test, with WCAG 2 A/AA checks that fail it on a violation.                                                                                                                                                       |
+
+The three live in `src/Innovark.Weather.UI` as a bun workspace (`src/Innovark.Weather.UI/package.json`), so the web app and Storybook use the components package directly. The form's validation (zod) mirrors `HistoryRequestValidator`: the hour must be no later than the current hour and no more than 72 hours before it, in UTC+7.
+
 ## Design decisions
 
 | Decision                                                    | Why                                                                                                                                                                                                                                                       |
@@ -101,11 +126,16 @@ Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /opena
 src/
 ├── Innovark.Weather.Api/             # HTTP in: endpoints, error mapping, composition root
 ├── Innovark.Weather.Application/     # Business rules and use cases; defines the interfaces it needs
-└── Innovark.Weather.Infrastructure/  # External systems: implements those interfaces (Open-Meteo)
+├── Innovark.Weather.Infrastructure/  # External systems: implements those interfaces (Open-Meteo)
+└── Innovark.Weather.UI/              # bun workspace for the web front end
+    ├── Innovark.Weather.Web/         # Razor Pages + React (Vite) web app and its endpoint
+    ├── Innovark.Weather.Components/  # Shared React components (shadcn/ui)
+    └── Innovark.Weather.Storybook/   # Stories for the components
 tests/
 ├── Innovark.Weather.UnitTests/         # Application and Infrastructure, no network
-└── Innovark.Weather.IntegrationTests/  # The full API in memory via WebApplicationFactory
-scripts/                                # run-api.sh and the test scripts
+├── Innovark.Weather.IntegrationTests/      # The full API in memory via WebApplicationFactory
+└── Innovark.Weather.Web.IntegrationTests/  # The web app's page and endpoint in memory
+scripts/                                # run-api.sh, run-web.sh and the test scripts
 Directory.Build.props, Directory.Packages.props, global.json   # shared build settings, package versions, SDK
 Dockerfile, docker-compose.yml
 ```
@@ -185,6 +215,7 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 | Unit        | Open-Meteo (a stub handler serving a real saved response), the clock (`FakeTimeProvider`), and the client in service tests |
 | Integration | Only Open-Meteo's network and "now"; the real app runs in memory via `WebApplicationFactory`                               |
 | Live        | Nothing. They're explicit, so they run only on request: a window across midnight, and one up to the current hour           |
+| Web         | Storybook runs every story in Chromium with its play function and a11y checks                                              |
 
 Integration tests freeze only "now", with `FixedNowTimeProvider`. The resilience pipeline takes the same `TimeProvider` for its timeouts and retry delays, which a fully fake clock would stop, so requests would hang. The tests also shorten the resilience settings to milliseconds.
 
@@ -281,7 +312,7 @@ Deliberately left out:
 **Features**
 
 - **Many locations:** coordinates as a request parameter, prefetching popular locations, and maybe Open-Meteo's FlatBuffers format for large ranges.
-- **A web UI** (Vite, React, Tailwind, shadcn/ui) served from the same container. Actively in development on the [`feat/web`](https://github.com/phongtieuha/innovark-weather/tree/feat/web) branch.
+- **Web UI:** call the API from the web endpoint and show the 10 records, and serve the web app from a container too.
 
 ## Editor
 
