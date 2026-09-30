@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Kiota.Bundle" />
+  </ItemGroup>
+
   <!-- Output of an earlier client build; excluded from the default glob so stale hashed files never
        reach the manifest. ClientBuild adds the current ones. -->
   <ItemGroup>

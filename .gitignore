@@ -489,3 +489,4 @@ node_modules/
 .vite/
 src/Innovark.Weather.UI/Innovark.Weather.Web/wwwroot/js/build/
 storybook-static/
+.kiota.log

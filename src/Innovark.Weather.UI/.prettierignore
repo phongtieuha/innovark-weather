@@ -10,6 +10,7 @@ Innovark.Weather.Web/Properties
 Innovark.Weather.Web/appsettings*.json
 
 # Generated
+Innovark.Weather.Web/WeatherApi
 Innovark.Weather.Web/wwwroot/js/build
 Innovark.Weather.Storybook/public/mockServiceWorker.js
 Innovark.Weather.Storybook/storybook-static

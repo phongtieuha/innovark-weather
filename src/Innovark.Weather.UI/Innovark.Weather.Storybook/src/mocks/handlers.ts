@@ -7,16 +7,40 @@ export interface IWeatherHistoryRequest {
   readonly hour: number
 }
 
+export interface IWeatherHistoryResponse {
+  readonly requestedTime: string
+  readonly records: ReadonlyArray<{
+    readonly time: string
+    readonly temperatureC: number
+    readonly temperatureF: number
+    readonly relativeHumidity: number
+  }>
+}
+
+// The requested hour and the 9 before it, newest first, as the web endpoint returns them.
+function historyFor({ date, hour }: IWeatherHistoryRequest): IWeatherHistoryResponse {
+  const requested = Date.parse(`${date}T${String(hour).padStart(2, "0")}:00:00+07:00`)
+  const utc7 = (ms: number) => `${new Date(ms + 7 * 3_600_000).toISOString().slice(0, 19)}+07:00`
+  const records = Array.from({ length: 10 }, (_, i) => {
+    const temperatureC = Math.round((33 - i * 0.8) * 10) / 10
+    return {
+      time: utc7(requested - i * 3_600_000),
+      temperatureC,
+      temperatureF: Math.round((temperatureC * 1.8 + 32) * 10) / 10,
+      relativeHumidity: 57 + i * 4,
+    }
+  })
+  return { requestedTime: utc7(requested), records }
+}
+
 const WEATHER_HISTORY_URL = "/api/weather/history"
 
-// One handler per outcome of the web app's POST /api/weather/history, so each story can pick the
+// One handler per outcome of the web app's POST /api/weather/history (which calls the API), so each story can pick the
 // response it demonstrates instead of getting a random one.
 export const weatherHistoryHandlers = {
-  // What the placeholder endpoint does today: 200 OK echoing the request.
   success: http.post(WEATHER_HISTORY_URL, async ({ request }) => {
     await delay(600)
-    const body = (await request.json()) as IWeatherHistoryRequest
-    return HttpResponse.json(body)
+    return HttpResponse.json(historyFor((await request.json()) as IWeatherHistoryRequest))
   }),
 
   // The API's own 400 for an hour outside the 72-hour window.

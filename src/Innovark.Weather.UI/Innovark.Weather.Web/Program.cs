@@ -1,9 +1,11 @@
 using Innovark.Weather.Web.Endpoints;
+using Innovark.Weather.Web.ApiClients;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorPages();
 builder.Services.AddProblemDetails();
+builder.Services.AddWeatherApiClient();
 
 var app = builder.Build();
 

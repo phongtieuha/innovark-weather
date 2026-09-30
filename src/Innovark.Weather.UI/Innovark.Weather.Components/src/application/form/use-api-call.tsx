@@ -7,7 +7,9 @@ import type {
   IUseApiCallResult,
 } from "./models"
 
-const REQUEST_TIMEOUT_MS = 15_000
+// Longer than any server-side timeout behind it (the web app waits up to 20 s for the API), so a
+// slow request ends with the server's own error rather than a generic timeout here.
+const REQUEST_TIMEOUT_MS = 30_000
 
 function isValidationProblem(problem: IApiProblemDetails): problem is IApiValidationProblemDetails {
   return "errors" in problem

@@ -22,6 +22,7 @@ import { AppLayout } from "@web/client/components/AppLayout"
 import {
   weatherHistorySchema,
   type IWeatherHistoryRequest,
+  type IWeatherHistoryResponse,
   type WeatherHistoryFormValues,
 } from "./weather-history-schema"
 
@@ -36,7 +37,7 @@ function WeatherHistoryForm() {
   })
 
   const { submit, isLoading, isSuccess, isError, data, alertMessage } = useApiCall<
-    IWeatherHistoryRequest,
+    IWeatherHistoryResponse,
     IWeatherHistoryRequest
   >({
     request: (variables) =>
@@ -52,8 +53,9 @@ function WeatherHistoryForm() {
     openFormAlertAndFocus: openSuccessAlertAndFocus,
     setIsFormAlertOpen: setIsSuccessAlertOpen,
   } = useFormAction({
+    // requestedTime is ISO 8601 in UTC+7, e.g. 2026-09-28T14:00:00+07:00.
     message: data
-      ? `Request sent for ${data.date} at ${String(data.hour).padStart(2, "0")}:00 (UTC+7).`
+      ? `Loaded ${data.records.length} hourly records up to ${data.requestedTime.slice(0, 10)} ${data.requestedTime.slice(11, 16)} (UTC+7).`
       : "Request sent.",
     variant: "success",
     className: "w-full",

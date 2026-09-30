@@ -14,7 +14,11 @@ import {
 } from "@innovark-weather/components"
 import { expect, userEvent, waitFor, within } from "storybook/test"
 
-import { weatherHistoryHandlers, type IWeatherHistoryRequest } from "../../mocks/handlers"
+import {
+  weatherHistoryHandlers,
+  type IWeatherHistoryRequest,
+  type IWeatherHistoryResponse,
+} from "../../mocks/handlers"
 
 const REQUEST: IWeatherHistoryRequest = { date: "2026-09-28", hour: 14 }
 
@@ -30,7 +34,7 @@ function DataView({ data }: { readonly data: unknown }) {
 // turns ProblemDetails into `alertMessage`; useFormAction shows it and moves focus to it.
 function ApiCallDemo() {
   const { submit, isLoading, isSuccess, isError, isIdle, data, alertMessage } = useApiCall<
-    IWeatherHistoryRequest,
+    IWeatherHistoryResponse,
     IWeatherHistoryRequest
   >({
     request: (variables) =>
