@@ -1,10 +1,14 @@
 # Innovark Weather API
 
-A .NET 10 Web API that returns the last 10 hourly weather records for Ho Chi Minh City from Open-Meteo.
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![C# 14](https://img.shields.io/badge/C%23-14-239120)
+
+A .NET 10 Web API that returns 10 hourly weather records for Ho Chi Minh City (10.762622, 106.660172) from Open-Meteo's [Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api): the requested hour and the 9 hours before it, newest first. The date and hour are given in UTC+7 and may be up to 3 days in the past. Each record has the temperature in °C and °F and the relative humidity.
+
+**Contents:** [Getting started](#getting-started) · [Approach](#approach) · [API](#api) · [Design decisions](#design-decisions) · [Architecture](#architecture) · [Resilience and caching](#resilience-and-caching) · [Logging](#logging) · [Testing](#testing) · [Container](#container) · [Code quality](#code-quality) · [Security](#security) · [Further considerations](#further-considerations) · [Editor](#editor)
 
 ## Getting started
 
-Requires the .NET 10 SDK.
+Requires the .NET 10 SDK, or only Docker to run the container.
 
 ```bash
 # Run the API on http://localhost:5122 (Scalar UI at /scalar)
@@ -36,13 +40,55 @@ dotnet test
 dotnet test -- --explicit on
 ```
 
-| Script                                 | Runs                                                                                                                    |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `./scripts/run-api.sh`                 | The API in Development on `http://localhost:5122`, with the Scalar UI at `/scalar`, using `dotnet watch`: code changes are hot-reloaded, or the app restarts. Extra arguments go to `dotnet watch run`. |
-| `./scripts/run-tests.sh`               | All offline tests. Explicit tests, such as the live Open-Meteo test, are skipped.                                       |
-| `./scripts/run-tests-with-explicit.sh` | All tests, including explicit ones. Needs network access.                                                               |
+`run-api.sh` uses `dotnet watch`, so code changes are hot-reloaded. Extra arguments go to `dotnet watch run` or `dotnet test`, for example `./scripts/run-tests.sh -c Release`.
 
-The test scripts pass extra arguments to `dotnet test`, for example `./scripts/run-tests.sh -c Release`.
+## Approach
+
+This project follows a test-driven mindset, summed up as *"Code is cheap now, but quality is not."* Every piece of code is written together with its tests: no feature, endpoint or fix is added without them.
+
+## API
+
+`GET /api/v1/weather/history?date=2026-09-28&hour=14`, where `date` and `hour` (0–23) are in UTC+7. The requested hour must be no later than the current hour and no more than 72 hours before it.
+
+```json
+{
+  "location": { "latitude": 10.762622, "longitude": 106.660172, "utc_offset": "+07:00" },
+  "requested_time": "2026-09-28T14:00:00+07:00",
+  "records": [
+    { "current_time": "2026-09-28T14:00:00+07:00", "temperature_c": 33.1, "temperature_f": 91.6, "relative_humidity": 57 },
+    …
+    { "current_time": "2026-09-28T05:00:00+07:00", "temperature_c": 25.3, "temperature_f": 77.5, "relative_humidity": 98 }
+  ]
+}
+```
+
+`records` always has 10 hours: the requested hour first, then the 9 before it. °F is calculated from °C. Responses have a `Cache-Status` header (`hit` or `fwd=miss`).
+
+Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) ProblemDetails with a `trace_id`:
+
+| Status | When                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------ |
+| 400    | `hour` in the future, more than 72 hours old, or outside 0–23 (under `errors.hour`); or a missing or malformed parameter |
+| 404    | Unknown route                                                                                                            |
+| 502    | Open-Meteo returned an error, or not all 10 hours with values                                                            |
+| 503    | Open-Meteo timed out or couldn't be reached, or the circuit breaker is open                                              |
+| 500    | Unexpected error; details are logged, not returned                                                                       |
+
+Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /openapi/v1.json`. Sample requests are in `src/Innovark.Weather.Api/Innovark.Weather.Api.http`.
+
+## Design decisions
+
+| Decision                                                  | Why                                                                                                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Historical Weather API** (`archive-api.open-meteo.com`) | Named in the task. For recent hours it serves model data until ERA5 reanalysis replaces it about 5 days later.                       |
+| **Request whole days, then keep the 10 hours**            | The archive API documents only `start_date`/`end_date`; a window crossing midnight requests two days                                 |
+| **Fixed +07:00 offset**, `timezone=Asia/Ho_Chi_Minh`      | Vietnam has no daylight saving time, and chiseled images have no time zone database. A response with a different offset is rejected. |
+| **`DateTimeOffset` and an injected `TimeProvider`**       | The offset is never lost, and tests can fix "now"                                                                                    |
+| **`date` + `hour` input**, not one `datetime`             | As the task specifies; avoids URL-encoding `+07:00` and rounding minutes                                                             |
+| **72 hours, current hour allowed**                        | "3 days" taken as 72 hours, applied to the requested hour; the oldest record can be up to 81 hours old                               |
+| **Requested hour first, newest first**                    | "Starting from the specified time and counting backwards"                                                                            |
+| **°F calculated**, rounded half away from zero            | One upstream call, and both values describe the same reading                                                                         |
+| **502 unless exactly the 10 expected hours have values**  | Never return partial data; comparing timestamps also catches gaps, duplicates and shifted windows                                    |
 
 ## Architecture
 
@@ -54,6 +100,9 @@ src/
 tests/
 ├── Innovark.Weather.UnitTests/         # Application and Infrastructure, no network
 └── Innovark.Weather.IntegrationTests/  # The full API in memory via WebApplicationFactory
+scripts/                                # run-api.sh and the test scripts
+Directory.Build.props, Directory.Packages.props, global.json   # shared build settings, package versions, SDK
+Dockerfile, docker-compose.yml
 ```
 
 Dependencies point inward:
@@ -63,13 +112,13 @@ Api ──► Infrastructure ──► Application
  └──────────────────────────►┘
 ```
 
-`Application` references no other project and no HTTP or ASP.NET packages, so the compiler enforces the boundary.
+`Application` references no other project and no HTTP or ASP.NET packages, so the compiler enforces the boundary. There is no separate Domain project: the service owns no state and has no entities, so it would be empty.
 
 | Layer              | Responsibility                                                                                                                                                                                                              | Must not contain                                                                                        |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | **Application**    | Request validation (not in the future, not older than 72 hours, fixed UTC+7), the weather history use case (10-hour window, completeness check, °C→°F, newest first), response models, and the `IOpenMeteoClient` interface | `HttpClient`, `HttpContext`, Open-Meteo's JSON format                                                   |
 | **Infrastructure** | The typed `HttpClient` for Open-Meteo: builds the query, reads the JSON response, parses upstream errors, options with startup validation, resilience policies                                                              | Business rules or HTTP request handling                                                                 |
-| **Api**            | Minimal API endpoints, snake_case JSON, OpenAPI docs, exceptions mapped to ProblemDetails (400/502/503/500), dependency registration, health check                                                                            | Business rules or Open-Meteo details; endpoints only bind input, call the service and return the result |
+| **Api**            | Minimal API endpoints, snake_case JSON, OpenAPI docs, exceptions mapped to ProblemDetails (400/502/503/500), dependency registration, health check                                                                          | Business rules or Open-Meteo details; endpoints only bind input, call the service and return the result |
 
 ## Resilience and caching
 
@@ -85,7 +134,6 @@ The Open-Meteo client uses .NET's standard resilience handler (`Microsoft.Extens
 | Circuit breaker | 30 s sampling, 15 s break                              | After repeated failures, requests fail fast instead of waiting on timeouts                                     |
 
 - **Only transient failures are retried:** 5xx, 408, 429, connection errors and timeouts. A 400 from Open-Meteo means the request is wrong and won't succeed on retry.
-- **Failures map to clear status codes:** Open-Meteo errors and incomplete data return **502**, while timeouts, an open circuit and connection failures return **503**, all as ProblemDetails.
 - **A missing `Resilience` section falls back to the library defaults** instead of failing at startup.
 
 ### Caching
@@ -98,36 +146,43 @@ Responses are cached in memory with `HybridCache` for **30 minutes** per locatio
 - **Visible to clients:** every successful response has an RFC 9211 `Cache-Status` header, either `innovark-weather; hit` or `innovark-weather; fwd=miss`. Only the request that called Open-Meteo reports `fwd=miss`; requests that waited for its fetch report `hit`.
 - **Several instances:** each instance has its own in-memory cache. Registering an `IDistributedCache`, such as Redis, adds a shared second level without code changes.
 
-### Testing it
-
-- Integration tests use a clock that freezes only "now" (`FixedNowTimeProvider`). The resilience pipeline uses the same `TimeProvider`, and a fully fake clock would stop its timeouts and retry delays, so requests would hang.
-- The tests shorten the resilience settings to milliseconds, and cover: retries, no retry on 400, timeouts, the circuit opening, cache hits and misses, and incomplete data not being cached.
-
 ## Logging
 
 Logs are **structured**: messages are declared with `[LoggerMessage]`, so their values (cache key, status code, elapsed time) become named fields that can be filtered, not just text. The source generator also creates the logging code at build time, and a message template that doesn't match its parameters fails the build.
 
-| Level | Message | Where |
-|---|---|---|
-| Information | `Cache miss for {CacheKey}; fetched from Open-Meteo in {ElapsedMilliseconds} ms` | `WeatherHistoryService` |
-| Debug | `Cache hit for {CacheKey}` | `WeatherHistoryService` |
-| Warning | `Weather provider failure, returning {StatusCode}: {Reason}` (502/503) | `GlobalExceptionHandler` |
-| Error | `Unhandled exception.`, with the full exception (500) | `GlobalExceptionHandler` |
-| Debug | `Request aborted by the client.` | `GlobalExceptionHandler` |
+| Level       | Message                                                                          | Where                    |
+| ----------- | -------------------------------------------------------------------------------- | ------------------------ |
+| Information | `Cache miss for {CacheKey}; fetched from Open-Meteo in {ElapsedMilliseconds} ms` | `WeatherHistoryService`  |
+| Debug       | `Cache hit for {CacheKey}`                                                       | `WeatherHistoryService`  |
+| Warning     | `Weather provider failure, returning {StatusCode}: {Reason}` (502/503)           | `GlobalExceptionHandler` |
+| Error       | `Unhandled exception.`, with the full exception (500)                            | `GlobalExceptionHandler` |
+| Debug       | `Request aborted by the client.`                                                 | `GlobalExceptionHandler` |
 
 .NET also logs each Open-Meteo request and its duration (`IHttpClientFactory`) and each resilience attempt (retries, timeouts, circuit breaker).
 
-A 500 response never includes exception details: the exception is logged, and the client gets a generic ProblemDetails.
-
 ### Per environment
 
-| | Development | Other environments |
-|---|---|---|
-| Format | Readable text with a local `HH:mm:ss` timestamp | JSON, one object per line, UTC ISO 8601 timestamps, with scopes, ready for a log aggregator |
-| Project code (`Innovark.*`) | Debug, so cache hits are visible | Information; cache hits happen on every repeated request, so they aren't logged |
-| Framework (`Microsoft.AspNetCore`) | Warning | Warning |
+|                                    | Development                                     | Other environments                                                                          |
+| ---------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Format                             | Readable text with a local `HH:mm:ss` timestamp | JSON, one object per line, UTC ISO 8601 timestamps, with scopes, ready for a log aggregator |
+| Project code (`Innovark.*`)        | Debug, so cache hits are visible                | Information; cache hits happen on every repeated request, so they aren't logged             |
+| Framework (`Microsoft.AspNetCore`) | Warning                                         | Warning                                                                                     |
 
 Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:LogLevel` and `Logging:Console`), not in code. Levels can be changed without a rebuild, for example `Logging__LogLevel__Innovark=Debug`.
+
+## Testing
+
+`./scripts/run-tests.sh` runs offline tests; `./scripts/run-tests-with-explicit.sh` adds the live Open-Meteo test.
+
+| Level       | Replaced                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | Open-Meteo (a stub handler serving a real saved response), the clock (`FakeTimeProvider`), and the client in service tests |
+| Integration | Only Open-Meteo's network and "now"; the real app runs in memory via `WebApplicationFactory`                               |
+| Live        | Nothing. It's explicit, so it runs only on request.                                                                        |
+
+Integration tests freeze only "now", with `FixedNowTimeProvider`. The resilience pipeline takes the same `TimeProvider` for its timeouts and retry delays, which a fully fake clock would stop, so requests would hang. The tests also shorten the resilience settings to milliseconds.
+
+Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme dates), the 10-hour window and newest-first order, upstream errors and bad data, timeouts, retries and the circuit breaker, caching including 20 simultaneous requests, and every status code.
 
 ## Container
 
@@ -137,21 +192,102 @@ Build and check locally:
 
 ```bash
 docker buildx build --platform linux/amd64 -t innovark-weather-api --load .
-docker run --rm -p 5122:8080 --read-only --memory=512m --cpus=0.25 innovark-weather-api
+docker run -d --name api -p 5122:8080 --read-only --memory=512m --cpus=0.25 innovark-weather-api
 
-curl localhost:5122/health                                   # Healthy
-docker exec <container> sh                                   # fails: the image has no shell
-docker stop <container>                                      # logs "Application is shutting down..." and exits 0
+curl localhost:5122/health   # Healthy
+docker exec api sh           # fails: the image has no shell
+docker stop api              # graceful shutdown on SIGTERM
+docker logs api | tail -1    # ..."Application is shutting down..."
+docker rm api
 ```
+
+## Code quality
+
+Quality rules run in the build itself, so they apply the same way in every editor and on every machine, and will in CI too. Warnings are treated as errors (`TreatWarningsAsErrors` in `Directory.Build.props`), so the build fails on any warning.
+
+| Check                    | What it covers                                                                                                               | Enforced by                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| .NET analyzers           | Correctness, performance, reliability and security rules (`CA*`), at `AnalysisLevel=latest-recommended`                      | `dotnet build`                                                |
+| SonarQube rules          | SonarQube's C# rules (`S*`): bugs, code smells and security hotspots, via the `SonarAnalyzer.CSharp` package, with no server | `dotnet build`                                                |
+| Nullable reference types | Possible null dereferences (`CS86xx`)                                                                                        | `dotnet build`                                                |
+| Vulnerable packages      | Known vulnerabilities in NuGet dependencies (NuGet audit, e.g. `NU1903`)                                                     | `dotnet restore`                                              |
+| Formatting               | Indentation, spacing, LF line endings and `using` order from `.editorconfig`; `.gitattributes` keeps LF in git               | VS Code on format, and `dotnet format whitespace` (see below) |
+| Tests                    | Unit and integration tests                                                                                                   | `./scripts/run-tests.sh`                                      |
+
+Rule exceptions are made in `.editorconfig`, one rule at a time, with the reason in a comment. Currently there is one: CA1707 is off for `tests/`, so test names can use `Method_Scenario_Expected`.
+
+In the editor, **SonarQube for IDE** shows the same Sonar rules as you type, and C# Dev Kit shows the .NET analyzer warnings.
+
+Check formatting before committing:
+
+```bash
+dotnet format whitespace --folder --verify-no-changes --exclude "**/bin/**" "**/obj/**"
+```
+
+A Copilot `postToolUse` hook (`.github/hooks/format-csharp.json`) applies the same formatting to C# files Copilot edits.
+
+## Security
+
+The API is public and read-only, with no user data, no database and no secrets, so the attack surface is small. What protects it today:
+
+| Area                            | How it's protected                                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Input**                       | `date` and `hour` are strictly typed; `hour` must be 0–23; the requested time must be within the last 72 hours. Extreme dates return errors instead of throwing, and invalid requests never reach Open-Meteo. |
+| **Open-Meteo usage is bounded** | The 72-hour window allows about 73 distinct requests per location. With the 30-minute cache and stampede protection, that means at most about 73 Open-Meteo calls per 30 minutes, whatever the traffic.       |
+| **No SSRF or injection**        | Callers can't influence the outgoing request. The base URL and coordinates come from configuration, the call uses HTTPS, and every query value is escaped.                                                    |
+| **Errors**                      | A 500 returns a generic ProblemDetails with no exception message, type or stack trace; the exception is only logged. A test checks this.                                                                      |
+| **Development tools**           | `/scalar` and `/openapi/v1.json` exist only in Development.                                                                                                                                                   |
+| **Container**                   | Chiseled image with no shell or package manager, a non-root user, a read-only root filesystem, and few packages.                                                                                              |
+| **JSON**                        | Source-generated serialization of fixed types; no polymorphic or dynamic deserialization.                                                                                                                     |
+| **CORS**                        | Not enabled, so browsers on other sites can't call the API.                                                                                                                                                   |
+
+Dependency vulnerability audit and static analysis, including security rules, run in every build (see [Code quality](#code-quality)).
+
+Deliberately left out:
+
+- **Authentication:** the data is public. If usage ever needed controlling, API keys or JWT on `/api/v1` would be the next step.
+- **HTTPS in the app:** TLS is expected to end at the load balancer or ingress in front of it, so the app serves HTTP only, with no HTTPS redirection or HSTS.
+
+## Further considerations
+
+**Security**
+
+- **Rate limiting** with `AddRateLimiter`: a per-client limit returning 429. Open-Meteo is already protected by the cache, but the API itself isn't.
+- **Automated dependency updates** for NuGet packages, CI tooling and Docker base images, so security updates arrive as pull requests.
+- **Reproducible builds:** `packages.lock.json` (`RestorePackagesWithLockFile`), and base images pinned by digest instead of the moving `10.0` tag.
+- **Less information in responses:** remove the `Server: Kestrel` header, and return a generic 502 message, keeping Open-Meteo's error text in the logs.
+- **Production host configuration:** `AllowedHosts` set to the real host names, and forwarded headers limited to the known proxy network, so the logs and rate limiter see the real client IP.
+- **`X-Content-Type-Options: nosniff`** on responses.
+- **An SBOM** (software bill of materials) generated in CI.
+
+**Delivery**
+
+- **CI:** a pipeline that builds, runs the tests and checks formatting on every push. It would also build the image, scan it with Trivy (failing on critical and high findings), and run the live Open-Meteo test nightly, without blocking pull requests.
+- **SonarCloud** in CI, for quality-gate reports and test coverage on pull requests.
+- **The same SDK everywhere:** pin the SDK feature band in `global.json`, CI and the Dockerfile. The image's newer SDK found an analyzer warning the local SDK didn't.
+
+**Operations**
+
+- **Metrics and tracing:** OpenTelemetry for request rates, latency, cache hit rate and Open-Meteo calls. A hit-rate metric is more useful than logging every cache hit.
+- **A shared cache:** Redis as `HybridCache`'s second level when running several instances.
+- **Build-time generated code:** options validation, configuration binding and JSON serialization, removing reflection from startup so the API could publish with Native AOT.
+
+**Features**
+
+- **Many locations:** coordinates as a request parameter, prefetching popular locations, and maybe Open-Meteo's FlatBuffers format for large ranges.
+- **A web UI** (Vite, React, Tailwind, shadcn/ui) served from the same container.
 
 ## Editor
 
-This project is developed in [Visual Studio Code](https://code.visualstudio.com/). Required extensions:
+This project is developed in [Visual Studio Code](https://code.visualstudio.com/). Recommended extensions:
 
-| Extension                                                                                 | Used for                                                                                                  |
-| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit) | C# editing, the Solution Explorer, and running and debugging tests                                        |
-| [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)      | Sending the sample requests in `src/Innovark.Weather.Api/Innovark.Weather.Api.http` with **Send Request** |
+| Extension                                                                                             | Used for                                                                                                      |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit)             | C# editing, the Solution Explorer, and running and debugging tests                                            |
+| [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)                  | Sending the sample requests in `src/Innovark.Weather.Api/Innovark.Weather.Api.http` with **Send Request**     |
+| [SonarQube for IDE](https://marketplace.visualstudio.com/items?itemName=SonarSource.sonarlint-vscode) | Shows SonarQube's rules while you type, the same rules the build enforces (see [Code quality](#code-quality)) |
+
+`.vscode/extensions.json` lists them, so VS Code offers to install them when the repository is opened.
 
 The shared workspace settings in `.vscode/settings.json` turn on Explorer file nesting, for example grouping `appsettings.*.json` under `appsettings.json`. Any editor that supports the .NET 10 SDK works; the build and tests run from the command line. Visual Studio and JetBrains Rider can send `.http` requests without an extension.
 

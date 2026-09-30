@@ -25,7 +25,7 @@ public sealed class HistoryRequestValidator(TimeProvider timeProvider)
         // for extreme dates such as 0001-01-01, whose UTC equivalent is out of range.
         var requested = date.ToDateTime(new TimeOnly(hour, 0));
         var now = timeProvider.GetUtcNow().ToOffset(TimeZones.Vietnam).DateTime;
-        var nowHour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0);
+        var nowHour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Unspecified);
 
         if (requested > nowHour)
         {

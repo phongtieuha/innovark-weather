@@ -36,4 +36,4 @@ if (app.Environment.IsDevelopment())
 app.MapHealthChecks("/health");
 app.MapWeatherEndpoints();
 
-app.Run();
+await app.RunAsync();

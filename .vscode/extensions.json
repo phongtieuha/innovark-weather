@@ -1,0 +1,8 @@
+{
+  // VS Code offers to install these when the repository is opened.
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "humao.rest-client",
+    "sonarsource.sonarlint-vscode"
+  ]
+}

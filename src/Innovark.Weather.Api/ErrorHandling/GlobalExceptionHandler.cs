@@ -15,7 +15,7 @@ internal sealed partial class GlobalExceptionHandler(
     IProblemDetailsService problemDetailsService,
     ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
-    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken ct)
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         // The caller disconnected; there is no one to send a response to.
         if (exception is OperationCanceledException && httpContext.RequestAborted.IsCancellationRequested)
