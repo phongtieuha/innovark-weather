@@ -1,0 +1,14 @@
+# Only src/ and the root build files are needed to build the image.
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+tests/
+scripts/
+*.md
+docker-compose*.yml
+Dockerfile
+.dockerignore

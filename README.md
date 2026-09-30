@@ -15,13 +15,19 @@ Requires the .NET 10 SDK.
 
 # Run the tests with live
 ./scripts/run-tests-with-explicit.sh
+
+# Or run the container on the same port (Scalar UI at http://localhost:5122/scalar)
+docker compose up --build
+
+# The same container with production settings (JSON logs, no Scalar)
+ASPNETCORE_ENVIRONMENT=Production docker compose up --build
 ```
 
 The scripts work from any directory. Without bash, for example on Windows, run the same commands from the repository root:
 
 ```powershell
 # Run the API on http://localhost:5122 (Scalar UI at /scalar)
-dotnet run --project src/Innovark.Weather.Api --launch-profile http
+dotnet watch run --project src/Innovark.Weather.Api --launch-profile http
 
 # Run the tests without live
 dotnet test
@@ -32,7 +38,7 @@ dotnet test -- --explicit on
 
 | Script                                 | Runs                                                                                                                    |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `./scripts/run-api.sh`                 | The API in Development on `http://localhost:5122`, with the Scalar UI at `/scalar`. Extra arguments go to `dotnet run`. |
+| `./scripts/run-api.sh`                 | The API in Development on `http://localhost:5122`, with the Scalar UI at `/scalar`, using `dotnet watch`: code changes are hot-reloaded, or the app restarts. Extra arguments go to `dotnet watch run`. |
 | `./scripts/run-tests.sh`               | All offline tests. Explicit tests, such as the live Open-Meteo test, are skipped.                                       |
 | `./scripts/run-tests-with-explicit.sh` | All tests, including explicit ones. Needs network access.                                                               |
 
@@ -63,13 +69,13 @@ Api ──► Infrastructure ──► Application
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | **Application**    | Request validation (not in the future, not older than 72 hours, fixed UTC+7), the weather history use case (10-hour window, completeness check, °C→°F, newest first), response models, and the `IOpenMeteoClient` interface | `HttpClient`, `HttpContext`, Open-Meteo's JSON format                                                   |
 | **Infrastructure** | The typed `HttpClient` for Open-Meteo: builds the query, reads the JSON response, parses upstream errors, options with startup validation, resilience policies                                                              | Business rules or HTTP request handling                                                                 |
-| **Api**            | Minimal API endpoints, snake_case JSON, OpenAPI docs, exceptions mapped to ProblemDetails (400/502/503/500), dependency registration, health check, hosting settings for ECS                                                | Business rules or Open-Meteo details; endpoints only bind input, call the service and return the result |
+| **Api**            | Minimal API endpoints, snake_case JSON, OpenAPI docs, exceptions mapped to ProblemDetails (400/502/503/500), dependency registration, health check                                                                            | Business rules or Open-Meteo details; endpoints only bind input, call the service and return the result |
 
 ## Resilience and caching
 
 ### Calling Open-Meteo
 
-The Open-Meteo client uses .NET's standard resilience handler (`Microsoft.Extensions.Http.Resilience`). Its settings are in `OpenMeteo:Resilience` in `appsettings.json`, so they can be tuned per environment, for example with `OpenMeteo__Resilience__Retry__MaxRetryAttempts` on ECS.
+The Open-Meteo client uses .NET's standard resilience handler (`Microsoft.Extensions.Http.Resilience`). Its settings are in `OpenMeteo:Resilience` in `appsettings.json`, so they can be tuned per environment, for example with the environment variable `OpenMeteo__Resilience__Retry__MaxRetryAttempts`.
 
 | Setting         | Value                                                  | Why                                                                                                            |
 | --------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
@@ -90,12 +96,53 @@ Responses are cached in memory with `HybridCache` for **30 minutes** per locatio
 - **Only complete data is cached.** If Open-Meteo returns missing hours or null values, the request fails with 502, nothing is stored, and the next request tries again.
 - **Stampede protection:** when several requests for the same hour arrive together, only one calls Open-Meteo. The others wait for that fetch and get its result; if it fails, they all get the error and nothing is cached. A test sends 20 simultaneous requests and checks that Open-Meteo is called once.
 - **Visible to clients:** every successful response has an RFC 9211 `Cache-Status` header, either `innovark-weather; hit` or `innovark-weather; fwd=miss`. Only the request that called Open-Meteo reports `fwd=miss`; requests that waited for its fetch report `hit`.
-- **Horizontal ECS scaling:** each instance has its own in-memory cache. Registering an `IDistributedCache`, such as Redis on ElastiCache, adds a shared second level without code changes.
+- **Several instances:** each instance has its own in-memory cache. Registering an `IDistributedCache`, such as Redis, adds a shared second level without code changes.
 
 ### Testing it
 
 - Integration tests use a clock that freezes only "now" (`FixedNowTimeProvider`). The resilience pipeline uses the same `TimeProvider`, and a fully fake clock would stop its timeouts and retry delays, so requests would hang.
 - The tests shorten the resilience settings to milliseconds, and cover: retries, no retry on 400, timeouts, the circuit opening, cache hits and misses, and incomplete data not being cached.
+
+## Logging
+
+Logs are **structured**: messages are declared with `[LoggerMessage]`, so their values (cache key, status code, elapsed time) become named fields that can be filtered, not just text. The source generator also creates the logging code at build time, and a message template that doesn't match its parameters fails the build.
+
+| Level | Message | Where |
+|---|---|---|
+| Information | `Cache miss for {CacheKey}; fetched from Open-Meteo in {ElapsedMilliseconds} ms` | `WeatherHistoryService` |
+| Debug | `Cache hit for {CacheKey}` | `WeatherHistoryService` |
+| Warning | `Weather provider failure, returning {StatusCode}: {Reason}` (502/503) | `GlobalExceptionHandler` |
+| Error | `Unhandled exception.`, with the full exception (500) | `GlobalExceptionHandler` |
+| Debug | `Request aborted by the client.` | `GlobalExceptionHandler` |
+
+.NET also logs each Open-Meteo request and its duration (`IHttpClientFactory`) and each resilience attempt (retries, timeouts, circuit breaker).
+
+A 500 response never includes exception details: the exception is logged, and the client gets a generic ProblemDetails.
+
+### Per environment
+
+| | Development | Other environments |
+|---|---|---|
+| Format | Readable text with a local `HH:mm:ss` timestamp | JSON, one object per line, UTC ISO 8601 timestamps, with scopes, ready for a log aggregator |
+| Project code (`Innovark.*`) | Debug, so cache hits are visible | Information; cache hits happen on every repeated request, so they aren't logged |
+| Framework (`Microsoft.AspNetCore`) | Warning | Warning |
+
+Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:LogLevel` and `Logging:Console`), not in code. Levels can be changed without a rebuild, for example `Logging__LogLevel__Innovark=Debug`.
+
+## Container
+
+The `Dockerfile` builds a multi-stage image on `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled`: about 128 MB, no shell, no package manager, running as a non-root user. `docker-compose.yml` runs it as the `innovark-weather` project with a read-only root filesystem.
+
+Build and check locally:
+
+```bash
+docker buildx build --platform linux/amd64 -t innovark-weather-api --load .
+docker run --rm -p 5122:8080 --read-only --memory=512m --cpus=0.25 innovark-weather-api
+
+curl localhost:5122/health                                   # Healthy
+docker exec <container> sh                                   # fails: the image has no shell
+docker stop <container>                                      # logs "Application is shutting down..." and exits 0
+```
 
 ## Editor
 

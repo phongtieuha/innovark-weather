@@ -79,7 +79,9 @@ public sealed partial class WeatherHistoryService(
                 var hours = await client.GetHourlyAsync(windowStart, windowEnd, token);
                 var checkedRecords = ToRecords(hours, windowStart, windowEnd);
 
-                LogFetched(logger, key, timeProvider.GetElapsedTime(started).TotalMilliseconds);
+                var elapsedMilliseconds = timeProvider.GetElapsedTime(started).TotalMilliseconds;
+                LogFetched(logger, key, elapsedMilliseconds);
+
                 return checkedRecords;
             },
             CacheEntryOptions,

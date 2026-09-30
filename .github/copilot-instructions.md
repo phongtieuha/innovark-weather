@@ -71,3 +71,7 @@ Folders mirror `src/`, with one test class per class under test, named `<Class>T
 - Registration methods (`AddApplication`, `AddInfrastructure`) have their own `DependencyInjectionTests`.
 
 Run `./scripts/run-tests.sh` before committing; the build treats warnings as errors.
+
+## Formatting
+
+`.editorconfig` defines the formatting: LF line endings, a final newline, and no blank lines between `using` groups. A `postToolUse` hook (`.github/hooks/format-csharp.json`) runs `dotnet format whitespace` on the C# files you edit, the same formatter VS Code uses. Edit JSON and other config files line by line, keeping their existing layout; don't re-serialize whole files.

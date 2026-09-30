@@ -3,13 +3,13 @@
 # Update @date before sending.
 @date = 2026-09-30 
 
-# Relative to today, 3 days ago is always within 72 hours;
+# Relative to today, 2 days ago is always within 72 hours;
 # 5 days ago is always outside it, whatever the time of day or the machine's time zone.
-@threeDaysAgo = {{$localDatetime "YYYY-MM-DD" -3 d}}
+@twoDaysAgo = {{$localDatetime "YYYY-MM-DD" -2 d}}
 @fiveDaysAgo = {{$localDatetime "YYYY-MM-DD" -5 d}}
 
-### 200: within the last 3 days
-GET {{host}}/api/v1/weather/history?date={{threeDaysAgo}}&hour=12
+### 200: within the last 2 days
+GET {{host}}/api/v1/weather/history?date={{twoDaysAgo}}&hour=12
 Accept: application/json
 
 ### 200: Window crossing midnight (01:00 back to 16:00 the previous day)
@@ -28,7 +28,7 @@ GET {{host}}/api/v1/weather/history?date={{date}}
 ### 400: malformed date
 GET {{host}}/api/v1/weather/history?date=29-09-2026&hour=10
 
-### Health check (used by the ALB in ECS)
+### Health check
 GET {{host}}/health
 
 ### OpenAPI document (Development only; UI at /scalar)

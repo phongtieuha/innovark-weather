@@ -1,0 +1,17 @@
+# Local run of the production image, with a read-only root filesystem.
+# Development environment by default, so the Scalar UI is available at http://localhost:5122/scalar.
+# Run with production settings: ASPNETCORE_ENVIRONMENT=Production docker compose up --build
+
+# Groups the containers as "innovark-weather" in Docker Desktop, whatever the folder is called.
+name: innovark-weather
+
+services:
+  api:
+    build: .
+    image: innovark-weather-api
+    # Host port 5122, the same as ./scripts/run-api.sh and the .http file; the container listens on 8080.
+    ports:
+      - "5122:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+    read_only: true

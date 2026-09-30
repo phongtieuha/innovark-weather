@@ -33,7 +33,7 @@ public static class WeatherEndpoints
     // Endpoints only bind input, call the service and map its result to HTTP.
     private static async Task<Results<Ok<WeatherHistoryResponse>, ValidationProblem>> GetHistoryAsync(
         [Description("Date in UTC+7, e.g. 2026-09-28.")] DateOnly date,
-        [Description("Hour in UTC+7, 0–23.")] [Range(0, 23)] int hour,
+        [Description("Hour in UTC+7, 0–23.")][Range(0, 23)] int hour,
         WeatherHistoryService service,
         HttpResponse response,
         CancellationToken ct)

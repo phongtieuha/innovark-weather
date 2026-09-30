@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "./.github/hooks/format-csharp.sh",
+        "cwd": ".",
+        "timeoutSec": 60
+      }
+    ]
+  }
+}

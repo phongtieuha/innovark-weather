@@ -48,11 +48,11 @@ internal sealed partial class GlobalExceptionHandler(
                 or BrokenCircuitException
                 or TaskCanceledException { InnerException: TimeoutException }
                 or HttpRequestException => new ProblemDetails
-            {
-                Status = StatusCodes.Status503ServiceUnavailable,
-                Title = "The weather provider is unavailable.",
-                Detail = "Open-Meteo did not respond in time or could not be reached. Try again later.",
-            },
+                {
+                    Status = StatusCodes.Status503ServiceUnavailable,
+                    Title = "The weather provider is unavailable.",
+                    Detail = "Open-Meteo did not respond in time or could not be reached. Try again later.",
+                },
 
             // No exception details: they could expose internals.
             _ => new ProblemDetails
