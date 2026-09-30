@@ -1,0 +1,35 @@
+# Sample requests. Dates are in UTC+7 and must be within the last 72 hours
+@host = http://localhost:5122
+# Update @date before sending.
+@date = 2026-09-30 
+
+# Relative to today, 3 days ago is always within 72 hours;
+# 5 days ago is always outside it, whatever the time of day or the machine's time zone.
+@threeDaysAgo = {{$localDatetime "YYYY-MM-DD" -3 d}}
+@fiveDaysAgo = {{$localDatetime "YYYY-MM-DD" -5 d}}
+
+### 200: within the last 3 days
+GET {{host}}/api/v1/weather/history?date={{threeDaysAgo}}&hour=12
+Accept: application/json
+
+### 200: Window crossing midnight (01:00 back to 16:00 the previous day)
+GET {{host}}/api/v1/weather/history?date={{date}}&hour=1
+Accept: application/json
+
+### 400: more than 3 days (72 hours) in the past (5 days ago at 10:00)
+GET {{host}}/api/v1/weather/history?date={{fiveDaysAgo}}&hour=10
+
+### 400: hour out of range
+GET {{host}}/api/v1/weather/history?date={{date}}&hour=24
+
+### 400: missing hour
+GET {{host}}/api/v1/weather/history?date={{date}}
+
+### 400: malformed date
+GET {{host}}/api/v1/weather/history?date=29-09-2026&hour=10
+
+### Health check (used by the ALB in ECS)
+GET {{host}}/health
+
+### OpenAPI document (Development only; UI at /scalar)
+GET {{host}}/openapi/v1.json

@@ -1,4 +1,13 @@
 {
+  // Load this solution on startup so the C# extension never guesses or keeps a stale project list
+  // (which shows up as decompiled Go to Definition results or false errors from source generators).
+  "dotnet.defaultSolution": "Innovark.Weather.slnx",
+
+  // Every .cs file here belongs to a project. Without this, a file opened before the solution finishes
+  // loading is treated as a standalone .NET 10 file-based program (no ASP.NET references, no source
+  // generators), so [LoggerMessage] and other generated code show false errors such as CS8795.
+  "dotnet.projects.enableFileBasedPrograms": false,
+
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {

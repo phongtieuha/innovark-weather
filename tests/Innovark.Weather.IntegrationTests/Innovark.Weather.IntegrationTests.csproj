@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Shares the real Open-Meteo response with the unit tests; Include because it lives outside this project. -->
+    <None Include="..\Innovark.Weather.UnitTests\Fixtures\**" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -15,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit.v3.mtp-v2" />
   </ItemGroup>
