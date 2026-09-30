@@ -8,7 +8,7 @@ A .NET 10 Web API that returns 10 hourly weather records for Ho Chi Minh City (1
 
 ## Demo
 
-[▶ Watch the demo](docs/demo/api.mp4): starting the API, a successful request, a cache hit, and validation errors.
+[▶ Watch the demo](https://github.com/user-attachments/assets/0ef1858a-65e2-4ab1-baa1-c5a43caa70db): starting the API, a successful request, a cache hit, and validation errors.
 
 ## Getting started
 
