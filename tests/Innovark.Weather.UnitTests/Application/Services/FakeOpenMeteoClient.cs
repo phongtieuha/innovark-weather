@@ -17,7 +17,8 @@ internal sealed class FakeOpenMeteoClient : IOpenMeteoClient
     /// <remarks>
     /// No real HTTP request is sent in unit tests, but in production each call here is a request to
     /// Open-Meteo. Recording calls lets a test check behavior the service's result cannot show, such
-    /// as an invalid request never reaching Open-Meteo (the result is <c>Invalid</c> either way).
+    /// as an invalid request never reaching Open-Meteo (the result is <c>Invalid</c> either way), or a
+    /// repeated request being served from the cache (the records are identical either way).
     /// Prefer asserting on the result; use this only when the result cannot reveal the behavior.
     /// </remarks>
     public List<(DateTimeOffset WindowStart, DateTimeOffset WindowEnd)> Calls { get; } = [];

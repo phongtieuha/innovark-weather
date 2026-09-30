@@ -2,6 +2,8 @@ using Innovark.Weather.Application.Exceptions;
 using Innovark.Weather.Infrastructure.OpenMeteo;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace Innovark.Weather.Api.ErrorHandling;
 
@@ -39,9 +41,13 @@ internal sealed partial class GlobalExceptionHandler(
                 Detail = exception.Message,
             },
 
-            // HttpClient.Timeout surfaces as TaskCanceledException with an inner TimeoutException;
-            // HttpRequestException covers connection and DNS failures.
-            TaskCanceledException { InnerException: TimeoutException } or HttpRequestException => new ProblemDetails
+            // The resilience pipeline's timeouts throw TimeoutRejectedException and an open circuit throws
+            // BrokenCircuitException; HttpClient's own timeout surfaces as TaskCanceledException with an
+            // inner TimeoutException; HttpRequestException covers connection and DNS failures.
+            TimeoutRejectedException
+                or BrokenCircuitException
+                or TaskCanceledException { InnerException: TimeoutException }
+                or HttpRequestException => new ProblemDetails
             {
                 Status = StatusCodes.Status503ServiceUnavailable,
                 Title = "The weather provider is unavailable.",

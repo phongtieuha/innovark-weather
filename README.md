@@ -65,6 +65,38 @@ Api ──► Infrastructure ──► Application
 | **Infrastructure** | The typed `HttpClient` for Open-Meteo: builds the query, reads the JSON response, parses upstream errors, options with startup validation, resilience policies                                                              | Business rules or HTTP request handling                                                                 |
 | **Api**            | Minimal API endpoints, snake_case JSON, OpenAPI docs, exceptions mapped to ProblemDetails (400/502/503/500), dependency registration, health check, hosting settings for ECS                                                | Business rules or Open-Meteo details; endpoints only bind input, call the service and return the result |
 
+## Resilience and caching
+
+### Calling Open-Meteo
+
+The Open-Meteo client uses .NET's standard resilience handler (`Microsoft.Extensions.Http.Resilience`). Its settings are in `OpenMeteo:Resilience` in `appsettings.json`, so they can be tuned per environment, for example with `OpenMeteo__Resilience__Retry__MaxRetryAttempts` on ECS.
+
+| Setting         | Value                                                  | Why                                                                                                            |
+| --------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Total timeout   | 15 s                                                   | The longest a caller waits, including retries                                                                  |
+| Attempt timeout | 5 s                                                    | One slow attempt doesn't use the whole budget                                                                  |
+| Retry           | 2 retries, exponential backoff with jitter from 500 ms | The request is an idempotent GET, so retrying is safe. Few retries, so a struggling upstream isn't overloaded. |
+| Circuit breaker | 30 s sampling, 15 s break                              | After repeated failures, requests fail fast instead of waiting on timeouts                                     |
+
+- **Only transient failures are retried:** 5xx, 408, 429, connection errors and timeouts. A 400 from Open-Meteo means the request is wrong and won't succeed on retry.
+- **Failures map to clear status codes:** Open-Meteo errors and incomplete data return **502**, while timeouts, an open circuit and connection failures return **503**, all as ProblemDetails.
+- **A missing `Resilience` section falls back to the library defaults** instead of failing at startup.
+
+### Caching
+
+Responses are cached in memory with `HybridCache` for **30 minutes** per location and requested hour.
+
+- **Why 30 minutes, not forever:** for recent hours, the Historical Weather API serves provisional model data (ECMWF IFS) until ERA5 reanalysis replaces it about 5 days later, so values can still change.
+- **Only complete data is cached.** If Open-Meteo returns missing hours or null values, the request fails with 502, nothing is stored, and the next request tries again.
+- **Stampede protection:** when several requests for the same hour arrive together, only one calls Open-Meteo. The others wait for that fetch and get its result; if it fails, they all get the error and nothing is cached. A test sends 20 simultaneous requests and checks that Open-Meteo is called once.
+- **Visible to clients:** every successful response has an RFC 9211 `Cache-Status` header, either `innovark-weather; hit` or `innovark-weather; fwd=miss`. Only the request that called Open-Meteo reports `fwd=miss`; requests that waited for its fetch report `hit`.
+- **Horizontal ECS scaling:** each instance has its own in-memory cache. Registering an `IDistributedCache`, such as Redis on ElastiCache, adds a shared second level without code changes.
+
+### Testing it
+
+- Integration tests use a clock that freezes only "now" (`FixedNowTimeProvider`). The resilience pipeline uses the same `TimeProvider`, and a fully fake clock would stop its timeouts and retry delays, so requests would hang.
+- The tests shorten the resilience settings to milliseconds, and cover: retries, no retry on 400, timeouts, the circuit opening, cache hits and misses, and incomplete data not being cached.
+
 ## Editor
 
 This project is developed in [Visual Studio Code](https://code.visualstudio.com/). Required extensions:

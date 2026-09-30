@@ -66,7 +66,7 @@ Folders mirror `src/`, with one test class per class under test, named `<Class>T
 - xUnit v3 and Shouldly. Test names follow `Method_Scenario_Expected`, and tests use arrange/act/assert separated by blank lines.
 - Pass `TestContext.Current.CancellationToken` to async calls.
 - Tests never touch the network. Use `StubHttpMessageHandler` with a fixture from `Fixtures/` for Open-Meteo.
-- Tests never use the real clock. Inject `TimeProvider` in code and use `FakeTimeProvider` in tests.
+- Tests never depend on the real date. Inject `TimeProvider` in code. Unit tests use `FakeTimeProvider`. Integration tests use `FixedNowTimeProvider`, which freezes "now" but keeps real timers, because the resilience pipeline takes the same `TimeProvider` from DI and `FakeTimeProvider` would freeze its timeouts and retry delays.
 - Tests against the real Open-Meteo API are `[Fact(Explicit = true)]` with `[Trait("Category", "Live")]`, so they only run on request.
 - Registration methods (`AddApplication`, `AddInfrastructure`) have their own `DependencyInjectionTests`.
 

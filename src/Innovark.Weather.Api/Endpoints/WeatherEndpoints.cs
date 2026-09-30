@@ -8,6 +8,11 @@ namespace Innovark.Weather.Api.Endpoints;
 
 public static class WeatherEndpoints
 {
+    // RFC 9211: which cache handled the request, and whether it was a hit or had to go upstream.
+    internal const string CacheStatusHeader = "Cache-Status";
+    internal const string CacheStatusHit = "innovark-weather; hit";
+    internal const string CacheStatusMiss = "innovark-weather; fwd=miss";
+
     public static IEndpointRouteBuilder MapWeatherEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/weather").WithTags("Weather");
@@ -30,12 +35,17 @@ public static class WeatherEndpoints
         [Description("Date in UTC+7, e.g. 2026-09-28.")] DateOnly date,
         [Description("Hour in UTC+7, 0–23.")] [Range(0, 23)] int hour,
         WeatherHistoryService service,
+        HttpResponse response,
         CancellationToken ct)
     {
         var result = await service.GetHistoryAsync(date, hour, ct);
 
-        return result.IsSuccess
-            ? TypedResults.Ok(result.Response)
-            : TypedResults.ValidationProblem(new Dictionary<string, string[]>(result.Errors));
+        if (!result.IsSuccess)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>(result.Errors));
+        }
+
+        response.Headers[CacheStatusHeader] = result.FromCache ? CacheStatusHit : CacheStatusMiss;
+        return TypedResults.Ok(result.Response);
     }
 }

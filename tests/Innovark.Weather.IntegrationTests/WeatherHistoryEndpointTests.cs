@@ -134,7 +134,7 @@ public class WeatherHistoryEndpointTests
     // --- 502 / 503 / 500 ---
 
     [Fact]
-    public async Task Get_UpstreamError_Returns502WithReason()
+    public async Task Get_UpstreamServerError_RetriesThenReturns502WithReason()
     {
         var openMeteo = StubOpenMeteoHandler.Json(
             HttpStatusCode.InternalServerError, """{ "error": true, "reason": "Internal error" }""");
@@ -146,6 +146,32 @@ public class WeatherHistoryEndpointTests
         using var json = await ReadJsonAsync(response);
         json.RootElement.GetProperty("title").GetString().ShouldBe("The weather provider returned an error.");
         json.RootElement.GetProperty("detail").GetString().ShouldBe("Open-Meteo returned HTTP 500: Internal error");
+        openMeteo.RequestCount.ShouldBe(3);   // the first attempt + 2 retries (appsettings.json)
+    }
+
+    [Fact]
+    public async Task Get_UpstreamBadRequest_IsNotRetried()
+    {
+        var openMeteo = StubOpenMeteoHandler.Json(
+            HttpStatusCode.BadRequest, """{ "error": true, "reason": "Invalid timezone" }""");
+        await using var factory = new WeatherApiFactory(openMeteo);
+
+        var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
+        openMeteo.RequestCount.ShouldBe(1);   // a 400 will not succeed on retry
+    }
+
+    [Fact]
+    public async Task Get_TransientUpstreamFailure_IsRetriedAndSucceeds()
+    {
+        var openMeteo = StubOpenMeteoHandler.Sequence(HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK);
+        await using var factory = new WeatherApiFactory(openMeteo);
+
+        var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        openMeteo.RequestCount.ShouldBe(2);
     }
 
     [Fact]
@@ -173,17 +199,17 @@ public class WeatherHistoryEndpointTests
     }
 
     [Fact]
-    public async Task Get_UpstreamTimeout_Returns503()
+    public async Task Get_UpstreamTimeout_Returns503AfterRetries()
     {
-        await using var factory = new WeatherApiFactory(
-            StubOpenMeteoHandler.NeverResponds(),
-            new Dictionary<string, string?> { ["OpenMeteo:TimeoutSeconds"] = "1" });
+        var openMeteo = StubOpenMeteoHandler.NeverResponds();
+        await using var factory = new WeatherApiFactory(openMeteo);
 
         var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
         using var json = await ReadJsonAsync(response);
         json.RootElement.GetProperty("title").GetString().ShouldBe("The weather provider is unavailable.");
+        openMeteo.RequestCount.ShouldBe(3);   // each attempt timed out after 200 ms
     }
 
     [Fact]
@@ -195,6 +221,109 @@ public class WeatherHistoryEndpointTests
         var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task Get_RepeatedUpstreamFailures_OpenCircuitAndReturn503WithoutCallingOpenMeteo()
+    {
+        // Open the circuit after 2 failed attempts (instead of the default 100) and retry once.
+        var openMeteo = StubOpenMeteoHandler.Sequence(HttpStatusCode.InternalServerError);
+        await using var factory = new WeatherApiFactory(openMeteo, new Dictionary<string, string?>
+        {
+            ["OpenMeteo:Resilience:Retry:MaxRetryAttempts"] = "1",
+            ["OpenMeteo:Resilience:CircuitBreaker:MinimumThroughput"] = "2",
+            ["OpenMeteo:Resilience:CircuitBreaker:FailureRatio"] = "0.5",
+        });
+        var client = factory.CreateClient();
+
+        var first = await client.GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+        var second = await client.GetAsync($"{Endpoint}?date=2026-09-28&hour=13", Ct);
+
+        first.StatusCode.ShouldBe(HttpStatusCode.BadGateway);            // 2 attempts failed; circuit opens
+        second.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);   // rejected by the open circuit
+        openMeteo.RequestCount.ShouldBe(2);
+    }
+
+    // --- Caching ---
+
+    [Fact]
+    public async Task Get_SameRequestTwice_CallsOpenMeteoOnce()
+    {
+        var openMeteo = StubOpenMeteoHandler.Fixture();
+        await using var factory = new WeatherApiFactory(openMeteo);
+        var client = factory.CreateClient();
+
+        using var first = await client.GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+        using var second = await client.GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+
+        CacheStatus(first).ShouldBe("innovark-weather; fwd=miss");
+        CacheStatus(second).ShouldBe("innovark-weather; hit");
+        (await second.Content.ReadAsStringAsync(Ct)).ShouldBe(await first.Content.ReadAsStringAsync(Ct));
+        openMeteo.RequestCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Get_DifferentHours_CallOpenMeteoForEach()
+    {
+        var openMeteo = StubOpenMeteoHandler.Fixture();
+        await using var factory = new WeatherApiFactory(openMeteo);
+        var client = factory.CreateClient();
+
+        using var first = await client.GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+        using var second = await client.GetAsync($"{Endpoint}?date=2026-09-28&hour=13", Ct);
+
+        CacheStatus(first).ShouldBe("innovark-weather; fwd=miss");
+        CacheStatus(second).ShouldBe("innovark-weather; fwd=miss");
+        openMeteo.RequestCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Get_ConcurrentRequestsForSameHour_CallOpenMeteoOnce()
+    {
+        // The upstream takes 300 ms, so all 20 requests arrive while the first fetch is still running.
+        // The attempt timeout is raised so the slow response isn't cut off by the test's 200 ms default.
+        var openMeteo = StubOpenMeteoHandler.SlowFixture(TimeSpan.FromMilliseconds(300));
+        await using var factory = new WeatherApiFactory(openMeteo, new Dictionary<string, string?>
+        {
+            ["OpenMeteo:Resilience:AttemptTimeout:Timeout"] = "00:00:02",
+            ["OpenMeteo:Resilience:TotalRequestTimeout:Timeout"] = "00:00:05",
+        });
+        var client = factory.CreateClient();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 20)
+            .Select(_ => client.GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct)));
+
+        try
+        {
+            responses.ShouldAllBe(r => r.StatusCode == HttpStatusCode.OK);
+            openMeteo.RequestCount.ShouldBe(1);
+
+            // One request ran the fetch; the other 19 waited for it and were served its result.
+            var statuses = responses.Select(CacheStatus).ToList();
+            statuses.Count(s => s == "innovark-weather; fwd=miss").ShouldBe(1);
+            statuses.Count(s => s == "innovark-weather; hit").ShouldBe(19);
+
+            var bodies = await Task.WhenAll(responses.Select(r => r.Content.ReadAsStringAsync(Ct)));
+            bodies.Distinct().Count().ShouldBe(1);
+        }
+        finally
+        {
+            foreach (var response in responses)
+            {
+                response.Dispose();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Get_InvalidRequest_HasNoCacheStatus()
+    {
+        await using var factory = new WeatherApiFactory(StubOpenMeteoHandler.Fixture());
+
+        using var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=15", Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Headers.Contains("Cache-Status").ShouldBeFalse();
     }
 
     [Fact]
@@ -226,6 +355,9 @@ public class WeatherHistoryEndpointTests
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
     }
+
+    private static string? CacheStatus(HttpResponseMessage response) =>
+        response.Headers.TryGetValues("Cache-Status", out var values) ? values.Single() : null;
 
     private static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response) =>
         await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(Ct), cancellationToken: Ct);

@@ -9,10 +9,12 @@ namespace Innovark.Weather.Application.Services;
 /// </summary>
 public sealed class WeatherHistoryResult
 {
-    private WeatherHistoryResult(WeatherHistoryResponse? response, IReadOnlyDictionary<string, string[]> errors)
+    private WeatherHistoryResult(
+        WeatherHistoryResponse? response, IReadOnlyDictionary<string, string[]> errors, bool fromCache)
     {
         Response = response;
         Errors = errors;
+        FromCache = fromCache;
     }
 
     /// <summary>Set only when the request was valid.</summary>
@@ -20,12 +22,15 @@ public sealed class WeatherHistoryResult
 
     public IReadOnlyDictionary<string, string[]> Errors { get; }
 
+    /// <summary>True when the records were served from the cache rather than fetched from Open-Meteo.</summary>
+    public bool FromCache { get; }
+
     [MemberNotNullWhen(true, nameof(Response))]
     public bool IsSuccess => Response is not null;
 
-    internal static WeatherHistoryResult Success(WeatherHistoryResponse response) =>
-        new(response, new Dictionary<string, string[]>());
+    internal static WeatherHistoryResult Success(WeatherHistoryResponse response, bool fromCache) =>
+        new(response, new Dictionary<string, string[]>(), fromCache);
 
     internal static WeatherHistoryResult Invalid(IReadOnlyDictionary<string, string[]> errors) =>
-        new(null, errors);
+        new(null, errors, fromCache: false);
 }

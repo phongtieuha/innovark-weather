@@ -2,12 +2,15 @@ using Innovark.Weather.Application.Exceptions;
 using Innovark.Weather.Application.Models;
 using Innovark.Weather.Application.Services;
 using Innovark.Weather.Application.Validation;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 
 namespace Innovark.Weather.UnitTests.Application.Services;
 
-public class WeatherHistoryServiceTests
+public sealed class WeatherHistoryServiceTests : IDisposable
 {
     private static readonly TimeSpan Plus7 = TimeSpan.FromHours(7);
 
@@ -15,6 +18,24 @@ public class WeatherHistoryServiceTests
     private static readonly DateTimeOffset Now = new(2026, 9, 28, 14, 25, 0, Plus7);
 
     private readonly FakeOpenMeteoClient _client = new();
+
+    // A real in-memory HybridCache per test (xUnit creates a new instance for each test), so calls within
+    // a test share it and tests never see each other's entries.
+    private readonly ServiceProvider _cacheProvider = new ServiceCollection().AddHybridCache().Services.BuildServiceProvider();
+    private readonly WeatherHistoryService _service;
+
+    public WeatherHistoryServiceTests()
+    {
+        var clock = new FakeTimeProvider(Now);
+        _service = new WeatherHistoryService(
+            new HistoryRequestValidator(clock),
+            _client,
+            _cacheProvider.GetRequiredService<HybridCache>(),
+            clock,
+            NullLogger<WeatherHistoryService>.Instance);
+    }
+
+    public void Dispose() => _cacheProvider.Dispose();
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -27,6 +48,7 @@ public class WeatherHistoryServiceTests
 
         result.IsSuccess.ShouldBeFalse();
         result.Response.ShouldBeNull();
+        result.FromCache.ShouldBeFalse();
         result.Errors["hour"].ShouldBe(["Requested time 2026-09-28T15:00+07:00 is in the future."]);
 
         // The result would be the same if the service fetched before validating; only the recorded
@@ -157,11 +179,58 @@ public class WeatherHistoryServiceTests
         ex.Message.ShouldContain("2026-09-28T07:00+07:00");
     }
 
+    // --- Caching ---
+    // The result is the same whether or not the cache was used; only the recorded calls show it.
+
+    [Fact]
+    public async Task GetHistoryAsync_SameRequestTwice_CallsClientOnce()
+    {
+        var first = await GetHistoryAsync(new DateOnly(2026, 9, 28), 14);
+        var second = await GetHistoryAsync(new DateOnly(2026, 9, 28), 14);
+
+        _client.Calls.Count.ShouldBe(1);
+        first.FromCache.ShouldBeFalse();
+        second.FromCache.ShouldBeTrue();
+        second.Response!.Records.ShouldBe(first.Response!.Records);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_DifferentHours_AreCachedSeparately()
+    {
+        await GetHistoryAsync(new DateOnly(2026, 9, 28), 14);
+        await GetHistoryAsync(new DateOnly(2026, 9, 28), 13);
+
+        _client.Calls.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_IncompleteData_IsNotCached()
+    {
+        _client.Respond = (start, end) => FakeOpenMeteoClient.CompleteWindow(start, end).Skip(1).ToList();
+        await Should.ThrowAsync<IncompleteWeatherDataException>(() => GetHistoryAsync(new DateOnly(2026, 9, 28), 14));
+
+        _client.Respond = FakeOpenMeteoClient.CompleteWindow;
+        var result = await GetHistoryAsync(new DateOnly(2026, 9, 28), 14);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.FromCache.ShouldBeFalse();
+        _client.Calls.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_CachedRecords_KeepPlus7Offset()
+    {
+        await GetHistoryAsync(new DateOnly(2026, 9, 28), 14);
+
+        var cached = await GetHistoryAsync(new DateOnly(2026, 9, 28), 14);
+
+        cached.Response!.Records.ShouldAllBe(r => r.CurrentTime.Offset == Plus7);
+    }
+
     // --- Helpers ---
 
     private static DateTimeOffset At(int day, int hour) => new(2026, 9, day, hour, 0, 0, Plus7);
 
     private Task<WeatherHistoryResult> GetHistoryAsync(DateOnly date, int hour) =>
-        new WeatherHistoryService(new HistoryRequestValidator(new FakeTimeProvider(Now)), _client)
-            .GetHistoryAsync(date, hour, Ct);
+        _service.GetHistoryAsync(date, hour, Ct);
 }

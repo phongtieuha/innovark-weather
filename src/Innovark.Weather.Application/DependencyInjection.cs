@@ -18,6 +18,10 @@ public static class DependencyInjection
         // handler rotation.
         services.AddScoped<WeatherHistoryService>();
 
+        // In-memory cache with stampede protection. Registering an IDistributedCache (e.g. Redis) adds a
+        // shared second level for multiple instances without code changes.
+        services.AddHybridCache();
+
         return services;
     }
 }
