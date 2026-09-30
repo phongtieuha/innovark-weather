@@ -9,6 +9,7 @@
 tests/
 scripts/
 *.md
+docs/
 docker-compose*.yml
 Dockerfile
 .dockerignore

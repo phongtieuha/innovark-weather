@@ -3,3 +3,10 @@
 
 # Scripts must stay LF to run in bash and Linux containers.
 *.sh text eol=lf
+
+# Media files are binary: never convert line endings or diff them as text.
+*.mp4 binary
+*.mov binary
+*.webm binary
+*.gif binary
+*.png binary
