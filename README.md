@@ -4,11 +4,11 @@
 
 A .NET 10 Web API that returns 10 hourly weather records for Ho Chi Minh City (10.762622, 106.660172) from Open-Meteo's [Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api): the requested hour and the 9 hours before it, newest first. The date and hour are given in UTC+7 and may be up to 3 days in the past. Each record has the temperature in °C and °F and the relative humidity.
 
-**Contents:** [Demo](#demo) · [Getting started](#getting-started) · [Approach](#approach) · [API](#api) · [Design decisions](#design-decisions) · [Architecture](#architecture) · [Resilience and caching](#resilience-and-caching) · [Logging](#logging) · [Testing](#testing) · [Container](#container) · [Code quality](#code-quality) · [Security](#security) · [Further considerations](#further-considerations) · [Editor](#editor)
+**Contents:** [Demo](#demo) · [Getting started](#getting-started) · [Approach](#approach) · [API](#api) · [Design decisions](#design-decisions) · [Architecture](#architecture) · [Resilience and caching](#resilience-and-caching) · [Logging](#logging) · [Testing](#testing) · [Container](#container) · [Code quality](#code-quality) · [Security](#security) · [Further considerations](#further-considerations) · [Editor](#editor) · [Disclaimer](#disclaimer)
 
 ## Demo
 
-[▶ Watch the demo](https://github.com/user-attachments/assets/0ef1858a-65e2-4ab1-baa1-c5a43caa70db): starting the API, a successful request, a cache hit, and validation errors.
+[▶ Watch the demo](https://github.com/user-attachments/assets/c1db315a-a219-4d57-bcb0-9857a5c5d36e): starting the API, successful requests with different test cases, cache hit/miss, and validation errors.
 
 ## Getting started
 

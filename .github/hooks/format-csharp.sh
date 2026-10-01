@@ -30,4 +30,9 @@ fi
 
 [[ ${#files[@]} -gt 0 ]] || exit 0
 dotnet format whitespace --folder --include "${files[@]}" >/dev/null 2>&1 || true
+
+# dotnet format leaves blank lines between using directives in place, although .editorconfig sets
+# dotnet_separate_import_directive_groups = false, so join them here. Only unindented lines match, so
+# `using var` statements inside methods are left alone.
+perl -0pi -e 's/^((?:global )?using [^;\n(]+;\n)\n+(?=(?:global )?using [^;\n(]+;)/$1/mg' "${files[@]}" 2>/dev/null || true
 exit 0

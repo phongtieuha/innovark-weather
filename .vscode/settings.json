@@ -8,6 +8,13 @@
   // generators), so [LoggerMessage] and other generated code show false errors such as CS8795.
   "dotnet.projects.enableFileBasedPrograms": false,
 
+  // Format C# on save with the .editorconfig rules, and sort usings (Organize Imports), which the
+  // formatter alone doesn't do.
+  "[csharp]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": { "source.organizeImports": "explicit" }
+  },
+
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {

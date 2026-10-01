@@ -1,5 +1,4 @@
 using System.Globalization;
-
 using Innovark.Weather.Application.Abstractions;
 using Innovark.Weather.Application.Common;
 using Innovark.Weather.Application.Exceptions;

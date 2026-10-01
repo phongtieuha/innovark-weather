@@ -1,11 +1,9 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
-
 using Innovark.Weather.Application.Abstractions;
 using Innovark.Weather.Application.Common;
 using Innovark.Weather.Application.Models;
-
 using Microsoft.Extensions.Options;
 
 namespace Innovark.Weather.Infrastructure.OpenMeteo;
