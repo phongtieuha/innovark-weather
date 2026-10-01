@@ -10,6 +10,8 @@ A .NET 10 Web API that returns 10 hourly weather records for Ho Chi Minh City (1
 
 [▶ Watch the demo](https://github.com/user-attachments/assets/c1db315a-a219-4d57-bcb0-9857a5c5d36e): starting the API, successful requests with different test cases, cache hit/miss, and validation errors.
 
+[▶ Watch the demo](https://github.com/user-attachments/assets/01e12a76-a3d8-4491-8a4d-bfb0dee43647): Web UI, form validation, separate web api.
+
 ## Getting started
 
 Requires the .NET 10 SDK, or only Docker to run the container.
@@ -86,7 +88,7 @@ Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /opena
 
 ## Web
 
-A one-page web app for the same request: a form with a date and an hour (UTC+7), validated in the browser with the API's rules, and a **Send** button. It posts to the web app's own endpoint, `POST /api/weather/history`, which calls the API and returns its 10 records in camelCase. The API's errors come back as ProblemDetails with the same status, so the page shows the API's validation messages; an unreachable API is a 503.
+A one-page web app for the same request: a form with a date and an hour (UTC+7), validated in the browser with the API's rules, and a **Send** button. It calls the web app's own endpoint, `GET /api/weather/history?date=…&hour=…`, which calls the API and returns its 10 records in camelCase. The API's errors come back as ProblemDetails with the same status, so the page shows the API's validation messages; an unreachable API is a 503.
 
 ```bash
 ./scripts/run-web.sh            # Vite dev server (:5173), the web app (:5048) and the API (:5122)
@@ -109,10 +111,10 @@ bun run format:check                                 # Prettier, for the three p
 
 Both hops use a client generated from an OpenAPI document, so request, response and error types always match the C# code. `generate-api-clients.sh` rebuilds both documents and regenerates both clients; the generated code is committed, so a change shows up as a diff.
 
-| Hop                      | Generator                                                                                                  | Generated into                                                              | From                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
-| Web app (server) → API   | [Kiota](https://learn.microsoft.com/openapi/kiota/), pinned as a local tool in `.config/dotnet-tools.json` | `Innovark.Weather.Web/WeatherApi` (settings in its `kiota-lock.json`)       | `src/Innovark.Weather.Api/openapi.json` |
-| Page (browser) → web app | [Orval](https://orval.dev), as a react-query hook (`usePostWeatherHistory`) and its models                 | `Innovark.Weather.Web/client/api/generated` (settings in `orval.config.ts`) | `Innovark.Weather.Web/openapi.json`     |
+| Hop                      | Generator                                                                                                                                                                    | Generated into                                                              | From                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
+| Web app (server) → API   | [Kiota](https://learn.microsoft.com/openapi/kiota/), pinned as a local tool in `.config/dotnet-tools.json`                                                                   | `Innovark.Weather.Web/WeatherApi` (settings in its `kiota-lock.json`)       | `src/Innovark.Weather.Api/openapi.json` |
+| Page (browser) → web app | [Orval](https://orval.dev), as a fetch function per endpoint (`getWeatherHistory`, which the page sends with react-query's `useMutation`), react-query hooks, and its models | `Innovark.Weather.Web/client/api/generated` (settings in `orval.config.ts`) | `Innovark.Weather.Web/openapi.json`     |
 
 Don't edit generated code. Every Orval request goes through `fetchApiAsync` (Orval's "mutator", `client/api/fetch-api.ts`), so hooks resolve to the response body and their `error` is the ProblemDetails; `toProblemState(error)` gives the page its field errors and alert. Paths are resolved against `<base href="~/">`, so the app works under a sub-path.
 

@@ -55,11 +55,19 @@ async function fetchApiAsync<T>(url: string, init: RequestInit = {}): Promise<T>
   return body as T
 }
 
-// A QueryClient for API calls through `fetchApiAsync`. TanStack Query's default networkMode
-// ("online") pauses a mutation while `navigator.onLine` is false, so it would never settle; "always"
-// sends it and surfaces the network error instead.
+// A QueryClient for API calls through `fetchApiAsync`:
+// - networkMode "always": the default ("online") pauses a request while `navigator.onLine` is
+//   false, so it would never settle; "always" sends it and surfaces the network error instead.
+// - No retries for queries (mutations have none by default): the API's errors, e.g. a validation
+//   problem, won't change on a retry, and the user would wait through several attempts to see them.
+// - No refetch on window focus: a result only changes when the user asks again.
 function createQueryClient(): QueryClient {
-  return new QueryClient({ defaultOptions: { mutations: { networkMode: "always" } } })
+  return new QueryClient({
+    defaultOptions: {
+      queries: { networkMode: "always", retry: false, refetchOnWindowFocus: false },
+      mutations: { networkMode: "always" },
+    },
+  })
 }
 
 export { createQueryClient, fetchApiAsync }

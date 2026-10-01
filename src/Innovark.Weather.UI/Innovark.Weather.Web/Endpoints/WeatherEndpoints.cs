@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Innovark.Weather.Web.ErrorHandling;
 using Innovark.Weather.Web.WeatherApi;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -12,9 +13,10 @@ public static class WeatherEndpoints
     {
         var group = app.MapGroup("/api/weather").WithTags("Weather");
 
-        // The operation ID names the hook Orval generates for the page: usePostWeatherHistory.
-        group.MapPost("/history", GetHistoryAsync)
-            .WithName("PostWeatherHistory")
+        // A read, so GET with the date and hour in the query, like the API's own endpoint. The operation
+        // ID names the hook Orval generates for the page: useGetWeatherHistory.
+        group.MapGet("/history", GetHistoryAsync)
+            .WithName("GetWeatherHistory")
             .WithSummary("Get the 10 hourly records for a date and hour in UTC+7 from the weather API")
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status502BadGateway)
@@ -26,22 +28,20 @@ public static class WeatherEndpoints
     // Calls Innovark.Weather.Api through its Kiota client and returns the records in this app's own
     // contract. Errors are thrown and turned into ProblemDetails by GlobalExceptionHandler.
     private static async Task<Ok<WeatherHistoryResponse>> GetHistoryAsync(
-        WeatherHistoryRequest request,
+        [Description("Date in UTC+7, e.g. 2026-09-28.")] DateOnly date,
+        [Description("Hour in UTC+7, 0–23.")] int hour,
         WeatherApiClient api,
         CancellationToken ct)
     {
         var history = await api.Api.V1.Weather.History.GetAsync(config =>
         {
-            config.QueryParameters.Date = new Date(request.Date.Year, request.Date.Month, request.Date.Day);
-            config.QueryParameters.Hour = request.Hour;
+            config.QueryParameters.Date = new Date(date.Year, date.Month, date.Day);
+            config.QueryParameters.Hour = hour;
         }, ct);
 
         return TypedResults.Ok(WeatherHistoryResponse.From(history));
     }
 }
-
-/// <summary>The home page form: a date and hour in UTC+7.</summary>
-public sealed record WeatherHistoryRequest(DateOnly Date, int Hour);
 
 public sealed record WeatherHistoryResponse(DateTimeOffset RequestedTime, IReadOnlyList<WeatherHistoryRecord> Records)
 {

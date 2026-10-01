@@ -2,7 +2,7 @@ import { delay, http, HttpResponse } from "msw"
 
 import { serverErrorProblem, validationProblem } from "./problemDetails"
 
-export interface IWeatherHistoryRequest {
+export interface IWeatherHistoryParams {
   readonly date: string
   readonly hour: number
 }
@@ -18,7 +18,7 @@ export interface IWeatherHistoryResponse {
 }
 
 // The requested hour and the 9 before it, newest first, as the web endpoint returns them.
-function historyFor({ date, hour }: IWeatherHistoryRequest): IWeatherHistoryResponse {
+function historyFor({ date, hour }: IWeatherHistoryParams): IWeatherHistoryResponse {
   const requested = Date.parse(`${date}T${String(hour).padStart(2, "0")}:00:00+07:00`)
   const utc7 = (ms: number) => `${new Date(ms + 7 * 3_600_000).toISOString().slice(0, 19)}+07:00`
   const records = Array.from({ length: 10 }, (_, i) => {
@@ -36,16 +36,19 @@ function historyFor({ date, hour }: IWeatherHistoryRequest): IWeatherHistoryResp
 // Any origin and base path: fetchApiAsync resolves the path against the page's base URL.
 const WEATHER_HISTORY_URL = "*/api/weather/history"
 
-// One handler per outcome of the web app's POST /api/weather/history (which calls the API), so each story can pick the
-// response it demonstrates instead of getting a random one.
+// One handler per outcome of the web app's GET /api/weather/history?date=…&hour=… (which calls the
+// API), so each story can pick the response it demonstrates instead of getting a random one.
 export const weatherHistoryHandlers = {
-  success: http.post(WEATHER_HISTORY_URL, async ({ request }) => {
+  success: http.get(WEATHER_HISTORY_URL, async ({ request }) => {
     await delay(600)
-    return HttpResponse.json(historyFor((await request.json()) as IWeatherHistoryRequest))
+    const query = new URL(request.url).searchParams
+    return HttpResponse.json(
+      historyFor({ date: query.get("date") ?? "", hour: Number(query.get("hour")) }),
+    )
   }),
 
   // The API's own 400 for an hour outside the 72-hour window.
-  validation: http.post(WEATHER_HISTORY_URL, async () => {
+  validation: http.get(WEATHER_HISTORY_URL, async () => {
     await delay(600)
     return HttpResponse.json(
       validationProblem({
@@ -55,11 +58,11 @@ export const weatherHistoryHandlers = {
     )
   }),
 
-  serverError: http.post(WEATHER_HISTORY_URL, async () => {
+  serverError: http.get(WEATHER_HISTORY_URL, async () => {
     await delay(600)
     return HttpResponse.json(serverErrorProblem("An unexpected error occurred."), { status: 500 })
   }),
 
   // Makes the intercepted fetch reject like a real network failure.
-  networkError: http.post(WEATHER_HISTORY_URL, () => HttpResponse.error()),
+  networkError: http.get(WEATHER_HISTORY_URL, () => HttpResponse.error()),
 }

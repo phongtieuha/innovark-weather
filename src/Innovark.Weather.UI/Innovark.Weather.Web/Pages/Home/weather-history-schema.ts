@@ -1,10 +1,10 @@
 import * as z from "zod"
-import type { WeatherHistoryRequest } from "@web/client/api/generated/model"
+import type { GetWeatherHistoryParams } from "@web/client/api/generated/model"
 
-// The form's schema: a valid form becomes the endpoint's request body (WeatherHistoryRequest, generated
-// from openapi.json by Orval). The date (in UTC+7) must not be in the future or more than 3 days back.
-// The API still checks the exact hour (no later than the current hour, at most 72 hours before it) and
-// reports it under `hour`.
+// The form's schema: a valid form becomes the endpoint's query parameters (GetWeatherHistoryParams,
+// generated from openapi.json by Orval). The date (in UTC+7) must not be in the future or more than
+// 3 days back. The API still checks the exact hour (no later than the current hour, at most 72
+// hours before it) and reports it under `hour`.
 export const MAX_AGE_HOURS = 72
 
 const HOUR_MS = 60 * 60 * 1000
@@ -28,8 +28,8 @@ function isWithinLastThreeDays(date: string, latestMs: number): boolean {
   return date >= utc7DateOf(latestMs - MAX_AGE_HOURS * HOUR_MS)
 }
 
-// `satisfies` checks that a valid form is the endpoint's request body, while the form's own input type
-// is still inferred (WeatherHistoryFormValues, below).
+// `satisfies` checks that a valid form is the endpoint's query parameters, while the form's own
+// input type is still inferred (WeatherHistoryFormValues, below).
 export function weatherHistorySchema(now: () => Date = () => new Date()) {
   return (
     z
@@ -55,7 +55,7 @@ export function weatherHistorySchema(now: () => Date = () => new Date()) {
           .int({ message: "Enter a whole hour from 0 to 23.", abort: true })
           .min(0, { message: "Enter a whole hour from 0 to 23.", abort: true })
           .max(23, { message: "Enter a whole hour from 0 to 23." }),
-      }) satisfies z.ZodType<WeatherHistoryRequest>
+      }) satisfies z.ZodType<GetWeatherHistoryParams>
   )
 }
 

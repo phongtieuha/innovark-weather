@@ -1,6 +1,6 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { useMutation } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import {
   Button,
   Card,
@@ -19,11 +19,12 @@ import { expect, userEvent, waitFor, within } from "storybook/test"
 
 import {
   weatherHistoryHandlers,
-  type IWeatherHistoryRequest,
+  type IWeatherHistoryParams,
   type IWeatherHistoryResponse,
 } from "../../mocks/handlers"
 
-const REQUEST: IWeatherHistoryRequest = { date: "2026-09-28", hour: 14 }
+const PARAMS: IWeatherHistoryParams = { date: "2026-09-28", hour: 14 }
+const HISTORY_URL = `/api/weather/history?date=${PARAMS.date}&hour=${PARAMS.hour}`
 
 function DataView({ data }: { readonly data: unknown }) {
   return (
@@ -33,21 +34,19 @@ function DataView({ data }: { readonly data: unknown }) {
   )
 }
 
-// POSTs to the web app's /api/weather/history, answered by MSW (src/mocks/handlers.ts), the way an
-// Orval-generated hook does: useMutation over fetchApiAsync, which throws ProblemDetails on errors.
+// GETs the web app's /api/weather/history, answered by MSW (src/mocks/handlers.ts), the way the
+// Orval-generated hook does: useQuery over fetchApiAsync, which throws ProblemDetails on errors.
 // toProblemState turns them into `alertMessage`; useFormAction shows it and moves focus to it.
 function ApiCallDemo() {
-  const { mutate, isPending, isSuccess, isError, isIdle, data, error } = useMutation<
+  // The query runs once Send is clicked; clicking again asks again.
+  const [sent, setSent] = useState(false)
+  const { isFetching, isSuccess, isError, data, error, refetch } = useQuery<
     IWeatherHistoryResponse,
-    IApiProblemDetails,
-    IWeatherHistoryRequest
+    IApiProblemDetails
   >({
-    mutationFn: (variables) =>
-      fetchApiAsync("/api/weather/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(variables),
-      }),
+    queryKey: ["weatherHistory", PARAMS],
+    queryFn: ({ signal }) => fetchApiAsync(HISTORY_URL, { signal }),
+    enabled: sent,
   })
   const { alertMessage } = toProblemState(error)
 
@@ -80,20 +79,20 @@ function ApiCallDemo() {
   return (
     <Card className="max-w-md">
       <CardHeader>
-        <CardTitle>POST /api/weather/history</CardTitle>
+        <CardTitle>GET /api/weather/history</CardTitle>
         <CardDescription>
-          Sends {"{"} date: &quot;{REQUEST.date}&quot;, hour: {REQUEST.hour} {"}"}
+          With date={PARAMS.date} and hour={PARAMS.hour}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {SuccessAlert}
         {ErrorAlert}
-        {isIdle && <p className="text-muted-foreground text-sm">No request made yet.</p>}
+        {!sent && <p className="text-muted-foreground text-sm">No request made yet.</p>}
         {data && <DataView data={data} />}
       </CardContent>
       <CardFooter className="justify-end">
-        <Button onClick={() => mutate(REQUEST)} disabled={isPending}>
-          {isPending && <Spinner />}
+        <Button onClick={() => (sent ? void refetch() : setSent(true))} disabled={isFetching}>
+          {isFetching && <Spinner />}
           Send
         </Button>
       </CardFooter>

@@ -14,7 +14,7 @@ library behind the web app (`src/Innovark.Weather.UI/Innovark.Weather.Web`).
 - **Display**, **Forms**, **Interaction**: shadcn/ui components with the default theme.
 
 API calls are answered by [MSW](https://mswjs.io) (`src/mocks/handlers.ts`), which mocks the web
-app's `POST /api/weather/history`. Each story picks one outcome: success, validation error, server
+app's `GET /api/weather/history`. Each story picks one outcome: success, validation error, server
 error or network error.
 
 Every story is also a test (`bun run test`): it must render, pass its play function, and pass the

@@ -1,14 +1,15 @@
 import { defineConfig } from "orval"
 
-// Generates a typed react-query hook per endpoint of this app (usePostWeatherHistory) and its
+// Generates a typed react-query hook per endpoint of this app (useGetWeatherHistory) and its
 // models from the OpenAPI document the Debug build writes. Regenerate with `bun run generate:api`.
 export default defineConfig({
   web: {
     input: {
       target: "openapi.json",
       override: {
-        // Marks every schema property readOnly, so the generated models are readonly (arrays
-        // included). Only Orval's in-memory copy changes; the document on disk stays as written.
+        // Marks every schema property readOnly, so the models built from schemas are readonly (arrays
+        // included; query-parameter types get it from the hook below). Only Orval's in-memory copy
+        // changes; the document on disk stays as written.
         transformer: (spec) => {
           for (const schema of Object.values(spec.components?.schemas ?? {})) {
             // OpenAPI 3.1 also allows true/false as a schema; those have no properties.
@@ -34,6 +35,11 @@ export default defineConfig({
         mutator: { path: "client/api/fetch-api.ts", name: "fetchApiAsync" },
         fetch: { includeHttpResponseReturnType: false },
       },
+    },
+    // Query-parameter types aren't built from schemas, so the transformer above can't make them
+    // readonly, and Orval has no setting for it; this script adds `readonly` to their fields.
+    hooks: {
+      afterAllFilesWrite: "node scripts/readonly-params.mjs",
     },
   },
 })

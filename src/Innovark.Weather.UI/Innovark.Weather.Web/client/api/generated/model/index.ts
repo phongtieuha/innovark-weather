@@ -5,9 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './getWeatherHistoryParams.ts';
 export * from './httpValidationProblemDetails.ts';
 export * from './httpValidationProblemDetailsErrors.ts';
 export * from './problemDetails.ts';
 export * from './weatherHistoryRecord.ts';
-export * from './weatherHistoryRequest.ts';
 export * from './weatherHistoryResponse.ts';

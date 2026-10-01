@@ -26,12 +26,20 @@ public class OpenApiDocumentTests
     {
         using var document = await GetDocumentAsync();
 
-        var operation = document.RootElement.GetProperty("paths").GetProperty("/api/weather/history").GetProperty("post");
+        var operation = document.RootElement.GetProperty("paths").GetProperty("/api/weather/history").GetProperty("get");
 
-        // The operation ID names the generated hook: usePostWeatherHistory.
-        operation.GetProperty("operationId").GetString().ShouldBe("PostWeatherHistory");
+        // The operation ID names the generated hook: useGetWeatherHistory.
+        operation.GetProperty("operationId").GetString().ShouldBe("GetWeatherHistory");
         operation.GetProperty("responses").EnumerateObject().Select(r => r.Name)
             .ShouldBe(["200", "400", "502", "503"], ignoreOrder: true);
+
+        // Required query parameters, so the generated GetWeatherHistoryParams has both, as non-optional.
+        var parameters = operation.GetProperty("parameters").EnumerateArray()
+            .ToDictionary(p => p.GetProperty("name").GetString()!);
+        parameters.Keys.ShouldBe(["date", "hour"], ignoreOrder: true);
+        parameters.Values.ShouldAllBe(p => p.GetProperty("in").GetString() == "query" && p.GetProperty("required").GetBoolean());
+        parameters["date"].GetProperty("schema").GetProperty("format").GetString().ShouldBe("date");
+        parameters["hour"].GetProperty("schema").GetProperty("type").GetString().ShouldBe("integer");
     }
 
     [Fact]
@@ -42,18 +50,19 @@ public class OpenApiDocumentTests
 
         // Strict number handling: "integer"/"number", not ["integer", "string"], so the generated
         // TypeScript types are `number`, not `number | string`.
-        Property(schemas, "WeatherHistoryRequest", "hour").GetProperty("type").GetString().ShouldBe("integer");
         Property(schemas, "WeatherHistoryRecord", "temperatureC").GetProperty("type").GetString().ShouldBe("number");
         Property(schemas, "WeatherHistoryRecord", "relativeHumidity").GetProperty("type").GetString().ShouldBe("integer");
     }
 
-    [Fact]
-    public async Task PostHistory_WithHourAsString_ReturnsBadRequest()
+    [Theory]
+    [InlineData("date=2026-09-28&hour=abc")]   // hour not a number
+    [InlineData("date=2026-09-28")]            // missing hour
+    [InlineData("hour=14")]                    // missing date
+    public async Task GetHistory_WithInvalidQuery_ReturnsBadRequest(string query)
     {
         await using var factory = new WebAppFactory(StubWeatherApiHandler.Json(HttpStatusCode.OK, "{}"));
-        using var content = new StringContent("""{ "date": "2026-09-28", "hour": "14" }""", System.Text.Encoding.UTF8, "application/json");
 
-        var response = await factory.CreateClient().PostAsync("/api/weather/history", content, Ct);
+        var response = await factory.CreateClient().GetAsync($"/api/weather/history?{query}", Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }

@@ -5,50 +5,28 @@
  * OpenAPI spec version: 1.0.0
  */
 import {
-  useMutation
+  useQuery
 } from '@tanstack/react-query';
 import type {
-  MutationFunction,
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   QueryClient,
-  UseMutationOptions,
-  UseMutationResult
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
+  GetWeatherHistoryParams,
   HttpValidationProblemDetails,
   ProblemDetails,
-  WeatherHistoryRequest,
   WeatherHistoryResponse
 } from './model';
 
 import { fetchApiAsync } from '../fetch-api.ts';
-
-// https://stackoverflow.com/questions/49579094/typescript-conditional-types-filter-out-readonly-properties-pick-only-requir/49579497#49579497
-type IfEquals<X, Y, A = X, B = never> = (<T>() => T extends X ? 1 : 2) extends <
-T,
->() => T extends Y ? 1 : 2
-? A
-: B;
-
-type WritableKeys<T> = {
-[P in keyof T]-?: IfEquals<
-  { [Q in P]: T[P] },
-  { -readonly [Q in P]: T[P] },
-  P
->;
-}[keyof T];
-
-type UnionToIntersection<U> =
-  (U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never;
-type DistributeReadOnlyOverUnions<T> = T extends any ? NonReadonly<T> : never;
-
-type Writable<T> = Pick<T, WritableKeys<T>>;
-type NonReadonly<T> = [T] extends [UnionToIntersection<T>] ? {
-  [P in keyof Writable<T>]: T[P] extends object
-    ? NonReadonly<NonNullable<T[P]>>
-    : T[P];
-} : DistributeReadOnlyOverUnions<T>;
-
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -57,39 +35,47 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 
 
 
-export const getPostWeatherHistoryUrl = () => {
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
+export const getGetWeatherHistoryUrl = (params: GetWeatherHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
-  return `/api/weather/history`
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/weather/history?${stringifiedParams}` : `/api/weather/history`
 }
 
 /**
  * @summary Get the 10 hourly records for a date and hour in UTC+7 from the weather API
  */
-export const postWeatherHistory = async (weatherHistoryRequest: NonReadonly<WeatherHistoryRequest>, options?: RequestInit): Promise<WeatherHistoryResponse> => {
+export const getWeatherHistory = async (params: GetWeatherHistoryParams, options?: RequestInit): Promise<WeatherHistoryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchApiAsync<WeatherHistoryResponse>(getPostWeatherHistoryUrl(),
+  return fetchApiAsync<WeatherHistoryResponse>(getGetWeatherHistoryUrl(params),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(weatherHistoryRequest)
+    method: 'GET'
+
+
   }
 );}
 
@@ -97,51 +83,78 @@ return fetchApiAsync<WeatherHistoryResponse>(getPostWeatherHistoryUrl(),
 
 
 
-export const getPostWeatherHistoryMutationKey = () => ['postWeatherHistory'] as const;
-
-export const getPostWeatherHistoryMutationOptions = <TError = HttpValidationProblemDetails | ProblemDetails,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postWeatherHistory>>, TError,PostWeatherHistoryMutationVariables, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof postWeatherHistory>>, TError,PostWeatherHistoryMutationVariables, TContext> => {
-
-const mutationKey = getPostWeatherHistoryMutationKey();
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
+export const getGetWeatherHistoryQueryKey = (params?: GetWeatherHistoryParams,) => {
+    return [
+    `/api/weather/history`, ...(params ? [params] : [])
+    ] as const;
+    }
 
 
+export const getGetWeatherHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getWeatherHistory>>, TError = HttpValidationProblemDetails | ProblemDetails>(params: GetWeatherHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWeatherHistory>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWeatherHistoryQueryKey(params);
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postWeatherHistory>>, PostWeatherHistoryMutationVariables> = (props) => {
-          const {data} = props ?? {};
 
-          return  postWeatherHistory(data,)
-        }
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWeatherHistory>>> = ({ signal }) => getWeatherHistory(params, { signal });
 
 
 
 
 
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWeatherHistory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
 
-  return  { mutationFn, ...mutationOptions }}
+export type GetWeatherHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getWeatherHistory>>>
+export type GetWeatherHistoryQueryError = HttpValidationProblemDetails | ProblemDetails
 
-    export type PostWeatherHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof postWeatherHistory>>>
-    export type PostWeatherHistoryMutationBody = NonReadonly<WeatherHistoryRequest>
-    export type PostWeatherHistoryMutationError = HttpValidationProblemDetails | ProblemDetails
-    export type PostWeatherHistoryMutationVariables = {data: NonReadonly<WeatherHistoryRequest>}
 
-    /**
+export function useGetWeatherHistory<TData = Awaited<ReturnType<typeof getWeatherHistory>>, TError = HttpValidationProblemDetails | ProblemDetails>(
+ params: GetWeatherHistoryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWeatherHistory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWeatherHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getWeatherHistory>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWeatherHistory<TData = Awaited<ReturnType<typeof getWeatherHistory>>, TError = HttpValidationProblemDetails | ProblemDetails>(
+ params: GetWeatherHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWeatherHistory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWeatherHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getWeatherHistory>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWeatherHistory<TData = Awaited<ReturnType<typeof getWeatherHistory>>, TError = HttpValidationProblemDetails | ProblemDetails>(
+ params: GetWeatherHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWeatherHistory>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
  * @summary Get the 10 hourly records for a date and hour in UTC+7 from the weather API
  */
-export const usePostWeatherHistory = <TError = HttpValidationProblemDetails | ProblemDetails,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postWeatherHistory>>, TError,PostWeatherHistoryMutationVariables, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postWeatherHistory>>,
-        TError,
-        PostWeatherHistoryMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostWeatherHistoryMutationOptions(options), queryClient);
-    }
+
+export function useGetWeatherHistory<TData = Awaited<ReturnType<typeof getWeatherHistory>>, TError = HttpValidationProblemDetails | ProblemDetails>(
+ params: GetWeatherHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWeatherHistory>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetWeatherHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

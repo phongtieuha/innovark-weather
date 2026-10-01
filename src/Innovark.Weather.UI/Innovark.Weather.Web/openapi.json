@@ -6,22 +6,34 @@
   },
   "paths": {
     "/api/weather/history": {
-      "post": {
+      "get": {
         "tags": [
           "Weather"
         ],
         "summary": "Get the 10 hourly records for a date and hour in UTC+7 from the weather API",
-        "operationId": "PostWeatherHistory",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WeatherHistoryRequest"
-              }
+        "operationId": "GetWeatherHistory",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "description": "Date in UTC+7, e.g. 2026-09-28.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
             }
           },
-          "required": true
-        },
+          {
+            "name": "hour",
+            "in": "query",
+            "description": "Hour in UTC+7, 0–23.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -172,23 +184,6 @@
             "format": "double"
           },
           "relativeHumidity": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "WeatherHistoryRequest": {
-        "required": [
-          "date",
-          "hour"
-        ],
-        "type": "object",
-        "properties": {
-          "date": {
-            "type": "string",
-            "format": "date"
-          },
-          "hour": {
             "type": "integer",
             "format": "int32"
           }
