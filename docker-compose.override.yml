@@ -1,0 +1,11 @@
+# Development additions, merged on top of docker-compose.yml by `docker compose up`. Production skips
+# this file: docker compose -f docker-compose.yml up --build
+
+services:
+  api:
+    # Published only in development, for Scalar (/scalar) and the .http samples. Host port 5122, the
+    # same as ./scripts/run-api.sh; in production the API is internal.
+    ports:
+      - "5122:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development

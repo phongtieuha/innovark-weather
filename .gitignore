@@ -482,3 +482,11 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Web client (src/Innovark.Weather.UI)
+node_modules/
+*.tsbuildinfo
+.vite/
+src/Innovark.Weather.UI/Innovark.Weather.Web/wwwroot/js/build/
+storybook-static/
+.kiota.log
