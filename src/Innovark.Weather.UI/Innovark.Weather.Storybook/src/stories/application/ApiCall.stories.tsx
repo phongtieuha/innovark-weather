@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import type { Meta, StoryObj } from "@storybook/react-vite"
+import { useMutation } from "@tanstack/react-query"
 import {
   Button,
   Card,
@@ -9,8 +10,10 @@ import {
   CardHeader,
   CardTitle,
   Spinner,
-  useApiCall,
+  fetchApiAsync,
+  toProblemState,
   useFormAction,
+  type IApiProblemDetails,
 } from "@innovark-weather/components"
 import { expect, userEvent, waitFor, within } from "storybook/test"
 
@@ -30,20 +33,23 @@ function DataView({ data }: { readonly data: unknown }) {
   )
 }
 
-// POSTs to the web app's /api/weather/history, answered by MSW (src/mocks/handlers.ts). useApiCall
-// turns ProblemDetails into `alertMessage`; useFormAction shows it and moves focus to it.
+// POSTs to the web app's /api/weather/history, answered by MSW (src/mocks/handlers.ts), the way an
+// Orval-generated hook does: useMutation over fetchApiAsync, which throws ProblemDetails on errors.
+// toProblemState turns them into `alertMessage`; useFormAction shows it and moves focus to it.
 function ApiCallDemo() {
-  const { submit, isLoading, isSuccess, isError, isIdle, data, alertMessage } = useApiCall<
+  const { mutate, isPending, isSuccess, isError, isIdle, data, error } = useMutation<
     IWeatherHistoryResponse,
+    IApiProblemDetails,
     IWeatherHistoryRequest
   >({
-    request: (variables) =>
-      fetch("/api/weather/history", {
+    mutationFn: (variables) =>
+      fetchApiAsync("/api/weather/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(variables),
       }),
   })
+  const { alertMessage } = toProblemState(error)
 
   const {
     FormAlert: SuccessAlert,
@@ -86,8 +92,8 @@ function ApiCallDemo() {
         {data && <DataView data={data} />}
       </CardContent>
       <CardFooter className="justify-end">
-        <Button onClick={() => submit(REQUEST)} disabled={isLoading}>
-          {isLoading && <Spinner />}
+        <Button onClick={() => mutate(REQUEST)} disabled={isPending}>
+          {isPending && <Spinner />}
           Send
         </Button>
       </CardFooter>

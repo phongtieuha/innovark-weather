@@ -1,7 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <!-- Writes this app's OpenAPI document to openapi.json next to this file on each Debug build;
+       Orval generates the page's typed client from it. Release skips it. -->
+  <PropertyGroup>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+    <OpenApiGenerateDocuments Condition="'$(Configuration)' != 'Debug'">false</OpenApiGenerateDocuments>
+  </PropertyGroup>
+
+  <!-- A build artifact for the generated client, not app content: not copied to the output or
+       published, and not watched (each Debug build rewrites it, which would restart dotnet watch). -->
   <ItemGroup>
+    <Content Update="openapi.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" Watch="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Kiota.Bundle" />
+  </ItemGroup>
+
+  <!-- Vite owns the client code (React Fast Refresh); dotnet watch only needs the C# and Razor files. -->
+  <ItemGroup>
+    <None Update="**/*.ts;**/*.tsx;**/*.css" Watch="false" />
+    <Content Update="**/*.css" Watch="false" />
   </ItemGroup>
 
   <!-- Output of an earlier client build; excluded from the default glob so stale hashed files never

@@ -142,6 +142,22 @@ public class WeatherEndpointsTests
     }
 
     [Fact]
+    public async Task PostHistory_UnexpectedError_Returns500WithoutExceptionDetails()
+    {
+        var weatherApi = StubWeatherApiHandler.Throws(new InvalidOperationException("Sensitive internal detail"));
+
+        await using var factory = new WebAppFactory(weatherApi);
+        var response = await factory.CreateClient().PostAsJsonAsync("/api/weather/history", ValidRequest, Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        body.ShouldContain("An unexpected error occurred.");
+        body.ShouldNotContain("Sensitive internal detail");
+        body.ShouldNotContain(" at ");   // no stack trace
+    }
+
+    [Fact]
     public async Task PostHistory_WithMalformedDate_ReturnsBadRequestWithoutCallingTheApi()
     {
         var weatherApi = StubWeatherApiHandler.Json(HttpStatusCode.OK, HistoryJson);

@@ -5,7 +5,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Innovark Weather</title>
-    <base href="/">
+    @* "~/" renders the app's path base, so API calls resolved against it work under a sub-path. *@
+    <base href="~/">
     <link rel="icon" href="data:," />
     @await RenderSectionAsync("Styles", false)
 </head>

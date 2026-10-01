@@ -8,8 +8,9 @@ Stories for `@innovark-weather/components` (`src/Innovark.Weather.UI/Innovark.We
 library behind the web app (`src/Innovark.Weather.UI/Innovark.Weather.Web`).
 
 - **Application**: form building blocks. `ControlledField` for react-hook-form fields with
-  collapsing errors, `useApiCall` for requests that return ASP.NET ProblemDetails,
-  and `useFormAction` for the result alert.
+  collapsing errors, `fetchApiAsync` (the fetch function for Orval's generated hooks) and
+  `toProblemState` for requests that return ASP.NET ProblemDetails, and `useFormAction` for the
+  result alert.
 - **Display**, **Forms**, **Interaction**: shadcn/ui components with the default theme.
 
 API calls are answered by [MSW](https://mswjs.io) (`src/mocks/handlers.ts`), which mocks the web

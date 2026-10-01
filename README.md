@@ -81,15 +81,15 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) ProblemDetails wit
 | 503    | Open-Meteo timed out or couldn't be reached, or the circuit breaker is open                                                         |
 | 500    | Unexpected error; details are logged, not returned                                                                                  |
 
-Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /openapi/v1.json`. Sample requests are in `src/Innovark.Weather.Api/Innovark.Weather.Api.http`. Each Debug build also writes the OpenAPI document to `docs/openapi/Innovark.Weather.Api.json`, so API changes show up as a diff.
+Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /openapi/v1.json`. Sample requests are in `src/Innovark.Weather.Api/Innovark.Weather.Api.http`. Each Debug build also writes the OpenAPI document to `src/Innovark.Weather.Api/openapi.json`, so API changes show up as a diff; the web app writes its own `openapi.json` next to its `.csproj`. Neither is copied to the build output or published.
 
 ## Web
 
 A one-page web app for the same request: a form with a date and an hour (UTC+7), validated in the browser with the API's rules, and a **Send** button. It posts to the web app's own endpoint, `POST /api/weather/history`, which calls the API and returns its 10 records in camelCase. The API's errors come back as ProblemDetails with the same status, so the page shows the API's validation messages; an unreachable API is a 503.
 
 ```bash
-./scripts/run-web.sh                      # Vite dev server (:5173), the web app (:5048) and the API (:5122)
-./scripts/generate-weather-api-client.sh   # after an API change: regenerate the web app's API client
+./scripts/run-web.sh            # Vite dev server (:5173), the web app (:5048) and the API (:5122)
+./scripts/generate-api-clients.sh   # after an endpoint change: regenerate the Kiota and Orval clients
 
 cd src/Innovark.Weather.UI
 bun install                                          # once: installs the three workspace packages
@@ -98,22 +98,31 @@ bun run --cwd Innovark.Weather.Storybook test        # every story as a test, in
 bun run format:check                                 # Prettier, for the three packages only
 ```
 
-| Package                       | What it is                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Innovark.Weather.Web`        | ASP.NET Core Razor Pages host. Each page (`Pages/Home/Home.cshtml`) mounts a React app from the `.ts` file of the same name: from the Vite dev server in Development, and from the hashed bundle in `wwwroot/js/build` otherwise (a Release build runs `bun run build`).                                                                                      |
-| `Innovark.Weather.Components` | `@innovark-weather/components`: [shadcn/ui](https://ui.shadcn.com) components with the default theme and fonts, a `DatePicker`, and form helpers: `ControlledField` (a react-hook-form field with a collapsing error), `useApiCall` (requests that return ProblemDetails), and `useFormAction` (the result alert). Shipped as TSX source, with no build step. |
-| `Innovark.Weather.Storybook`  | Stories for every component. API calls are answered by MSW, with one story per outcome (200, 400, 500, network error). Every story runs as a test, with WCAG 2 A/AA checks that fail it on a violation.                                                                                                                                                       |
+| Package                       | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Innovark.Weather.Web`        | ASP.NET Core Razor Pages host. Each page (`Pages/Home/Home.cshtml`) mounts a React app from the `.ts` file of the same name: from the Vite dev server in Development, and from the hashed bundle in `wwwroot/js/build` otherwise (a Release build runs `bun run build`).                                                                                                                                                                                                                             |
+| `Innovark.Weather.Components` | `@innovark-weather/components`: [shadcn/ui](https://ui.shadcn.com) components with the default theme and fonts, a `DatePicker`, and form helpers: `ControlledField` (a react-hook-form field with a collapsing error), `fetchApiAsync` (the fetch function for Orval's hooks: throws ProblemDetails on errors), `toProblemState` (field errors and the alert message from a ProblemDetails), `createQueryClient`, and `useFormAction` (the result alert). Shipped as TSX source, with no build step. |
+| `Innovark.Weather.Storybook`  | Stories for every component. API calls are answered by MSW, with one story per outcome (200, 400, 500, network error). Every story runs as a test, with WCAG 2 A/AA checks that fail it on a violation.                                                                                                                                                                                                                                                                                              |
 
-### API client
+### API clients
 
-The web app calls the API through a client generated by [Kiota](https://learn.microsoft.com/openapi/kiota/) from the OpenAPI document, in `Innovark.Weather.Web/WeatherApi` (generated code; don't edit it). `generate-weather-api-client.sh` rebuilds the document and regenerates the client with the settings in its `kiota-lock.json`; Kiota is pinned as a local tool in `.config/dotnet-tools.json`.
+Both hops use a client generated from an OpenAPI document, so request, response and error types always match the C# code. `generate-api-clients.sh` rebuilds both documents and regenerates both clients; the generated code is committed, so a change shows up as a diff.
 
-| Decision                                        | Why                                                                                                                                            |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Called from the web server, not the browser** | The browser only talks to its own origin: no CORS on the API, and the API's URL stays configuration (`WeatherApi:BaseUrl`)                     |
-| **Typed HttpClient from `IHttpClientFactory`**  | `WeatherApiClientFactory` builds Kiota's request adapter on it, so handlers and connection pooling are managed by the factory                  |
-| **20-second timeout, no retries**               | Longer than the API's own 15 s budget for Open-Meteo, so the API answers first; the API already retries, so retrying here would multiply calls |
-| **Own response contract**                       | The endpoint maps Kiota's models to its own records, so a change in the API shows up as a compile error in one place                           |
+| Hop                      | Generator                                                                                                  | Generated into                                                              | From                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
+| Web app (server) → API   | [Kiota](https://learn.microsoft.com/openapi/kiota/), pinned as a local tool in `.config/dotnet-tools.json` | `Innovark.Weather.Web/WeatherApi` (settings in its `kiota-lock.json`)       | `src/Innovark.Weather.Api/openapi.json` |
+| Page (browser) → web app | [Orval](https://orval.dev), as a react-query hook (`usePostWeatherHistory`) and its models                 | `Innovark.Weather.Web/client/api/generated` (settings in `orval.config.ts`) | `Innovark.Weather.Web/openapi.json`     |
+
+Don't edit generated code. Every Orval request goes through `fetchApiAsync` (Orval's "mutator", `client/api/fetch-api.ts`), so hooks resolve to the response body and their `error` is the ProblemDetails; `toProblemState(error)` gives the page its field errors and alert. Paths are resolved against `<base href="~/">`, so the app works under a sub-path.
+
+| Decision                                        | Why                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Called from the web server, not the browser** | The browser only talks to its own origin: no CORS on the API, and the API's URL stays configuration (`WeatherApi:BaseUrl`)                                                                                                                                                                              |
+| **Typed HttpClient from `IHttpClientFactory`**  | `WeatherApiClientFactory` builds Kiota's request adapter on it, so handlers and connection pooling are managed by the factory                                                                                                                                                                           |
+| **20-second timeout, no retries**               | Longer than the API's own 15 s budget for Open-Meteo, so the API answers first; the API already retries, so retrying here would multiply calls                                                                                                                                                          |
+| **Own response contract**                       | The endpoint maps Kiota's models to its own records, so a change in the API shows up as a compile error in one place                                                                                                                                                                                    |
+| **Errors mapped in one place**                  | Endpoints only call the API and return the result; `GlobalExceptionHandler` turns Kiota's exceptions into ProblemDetails (the API's own pass through with the same status, undocumented errors and contract breaks → 502, unreachable or timed out → 503), so every new endpoint gets the same behavior |
+| **Strict JSON numbers** in the web app          | ASP.NET's web defaults also accept numbers as strings, which makes every number `number \| string` in the document and the Orval types                                                                                                                                                                  |
 
 The three live in `src/Innovark.Weather.UI` as a bun workspace (`src/Innovark.Weather.UI/package.json`), so the web app and Storybook use the components package directly. The form's validation (zod) mirrors `HistoryRequestValidator`: the hour must be no later than the current hour and no more than 72 hours before it, in UTC+7.
 
@@ -147,8 +156,7 @@ tests/
 ├── Innovark.Weather.UnitTests/         # Application and Infrastructure, no network
 ├── Innovark.Weather.IntegrationTests/      # The full API in memory via WebApplicationFactory
 └── Innovark.Weather.Web.IntegrationTests/  # The web app in memory, with a stub in place of the API
-docs/openapi/                           # The API's OpenAPI document, written on each Debug build
-scripts/                                # run-api.sh, run-web.sh, generate-weather-api-client.sh and the test scripts
+scripts/                                # run-api.sh, run-web.sh, generate-api-clients.sh and the test scripts
 Directory.Build.props, Directory.Packages.props, global.json   # shared build settings, package versions, SDK
 Dockerfile, docker-compose.yml
 ```

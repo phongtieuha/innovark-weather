@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { QueryClientProvider } from "@tanstack/react-query"
+import { createQueryClient } from "@innovark-weather/components"
 
 interface IAppLayoutProps {
   readonly children: ReactNode
 }
 
 export function AppLayout({ children }: IAppLayoutProps) {
-  const [queryClient] = useState(() => new QueryClient())
+  const [queryClient] = useState(createQueryClient)
 
   return (
     <QueryClientProvider client={queryClient}>

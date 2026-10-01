@@ -50,39 +50,3 @@ export interface IUseFormActionResult {
   readonly setIsFormAlertOpen: React.Dispatch<React.SetStateAction<boolean>>
   readonly openFormAlertAndFocus: () => void
 }
-
-// Mirrors ASP.NET Core's built-in problem-details responses (RFC 9457): `ProblemDetails` from
-// `Results.Problem()` / the `AddProblemDetails()` exception middleware, and
-// `ValidationProblemDetails` (the `errors` variant) from `Results.ValidationProblem()`.
-export interface IApiProblemDetails {
-  readonly type?: string
-  readonly title: string
-  readonly status: number
-  readonly detail?: string
-  readonly instance?: string
-  readonly traceId?: string
-}
-
-export interface IApiValidationProblemDetails extends IApiProblemDetails {
-  readonly errors: Readonly<Record<string, readonly string[]>>
-}
-
-export interface IUseApiCallOptions<TRequest = void> {
-  readonly request: (variables: TRequest) => Promise<Response>
-}
-
-export interface IUseApiCallResult<TResponse, TRequest = void> {
-  readonly submit: (variables: TRequest) => void
-  readonly isLoading: boolean
-  // True until the first `submit()` settles (or after `reset()`) — no data, no error, not loading.
-  readonly isIdle: boolean
-  readonly isSuccess: boolean
-  readonly isError: boolean
-  readonly data?: TResponse
-  readonly fieldErrors?: Readonly<Record<string, readonly string[]>>
-  readonly problem?: IApiProblemDetails
-  readonly title?: string
-  readonly traceId?: string
-  readonly reset: () => void
-  readonly alertMessage: React.ReactNode
-}

@@ -72,21 +72,3 @@ export function weatherHistorySchema(now: () => Date = () => new Date()) {
 }
 
 export type WeatherHistoryFormValues = z.input<ReturnType<typeof weatherHistorySchema>>
-
-export interface IWeatherHistoryRequest {
-  readonly date: string
-  readonly hour: number
-}
-
-// The web endpoint's response (Endpoints/WeatherEndpoints.cs): the API's records, newest first.
-export interface IWeatherHistoryRecord {
-  readonly time: string
-  readonly temperatureC: number
-  readonly temperatureF: number
-  readonly relativeHumidity: number
-}
-
-export interface IWeatherHistoryResponse {
-  readonly requestedTime: string
-  readonly records: readonly IWeatherHistoryRecord[]
-}

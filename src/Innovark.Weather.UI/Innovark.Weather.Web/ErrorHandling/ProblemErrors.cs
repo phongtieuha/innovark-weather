@@ -1,7 +1,7 @@
 using Microsoft.Kiota.Abstractions.Serialization;
 using ApiModels = Innovark.Weather.Web.WeatherApi.Models;
 
-namespace Innovark.Weather.Web.Endpoints;
+namespace Innovark.Weather.Web.ErrorHandling;
 
 /// <summary>
 /// Reads a ValidationProblemDetails' <c>errors</c>. Its keys are dynamic (one per field), so Kiota

@@ -33,7 +33,8 @@ function historyFor({ date, hour }: IWeatherHistoryRequest): IWeatherHistoryResp
   return { requestedTime: utc7(requested), records }
 }
 
-const WEATHER_HISTORY_URL = "/api/weather/history"
+// Any origin and base path: fetchApiAsync resolves the path against the page's base URL.
+const WEATHER_HISTORY_URL = "*/api/weather/history"
 
 // One handler per outcome of the web app's POST /api/weather/history (which calls the API), so each story can pick the
 // response it demonstrates instead of getting a random one.

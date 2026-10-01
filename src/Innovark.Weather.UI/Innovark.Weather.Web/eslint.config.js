@@ -6,7 +6,7 @@ import reactRefresh from "eslint-plugin-react-refresh"
 import tseslint from "typescript-eslint"
 
 export default defineConfig(
-  { ignores: ["wwwroot", "bin", "obj"] },
+  { ignores: ["wwwroot", "bin", "obj", "client/api/generated"] },
   {
     extends: [js.configs.recommended, tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
