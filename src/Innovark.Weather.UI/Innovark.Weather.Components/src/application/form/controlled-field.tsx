@@ -20,7 +20,8 @@ const REQUIRED_MARK = (
 function ControlledField<
   TFieldValues extends FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
->({ node, control, className }: IControlledFieldProps<TFieldValues, TName>) {
+  TTransformedValues = TFieldValues,
+>({ node, control, className }: IControlledFieldProps<TFieldValues, TName, TTransformedValues>) {
   // `fieldState.error` goes undefined the instant `invalid` flips false, so this ref freezes the
   // last real error and keeps it showing while the row collapses, instead of the text vanishing
   // before the animation even starts.

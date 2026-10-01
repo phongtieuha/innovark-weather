@@ -23,12 +23,15 @@ export interface IControlledFieldNode<
   }) => React.ReactNode
 }
 
+// TTransformedValues: what the form's resolver turns valid values into (e.g. a zod schema that
+// converts the inputs' strings into an API request); the inputs' own type when it doesn't.
 export interface IControlledFieldProps<
   TFieldValues extends FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
+  TTransformedValues = TFieldValues,
 > {
   readonly node: IControlledFieldNode<TFieldValues, TName>
-  readonly control: Control<TFieldValues>
+  readonly control: Control<TFieldValues, unknown, TTransformedValues>
   readonly className?: string
 }
 

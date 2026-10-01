@@ -20,15 +20,30 @@ stop_tree() {
   kill "-$2" "$1" 2>/dev/null || true
 }
 
-# On exit (Ctrl+C, kill, closing the terminal, or the web app's dotnet watch ending), stop everything
-# this script started: SIGTERM so the apps shut down cleanly, then SIGKILL for what's left, since
-# dotnet watch treats SIGTERM as "stop the app" and keeps watching. Only this script's own processes: `kill 0` would also
-# hit whatever started the script when it isn't run from an interactive terminal.
-cleanup() {
-  trap - EXIT INT TERM HUP
+# True while any process this script started is still running.
+any_running() {
   local pid
+  for pid in ${pids[@]+"${pids[@]}"}; do kill -0 "$pid" 2>/dev/null && return 0; done
+  return 1
+}
+
+# On exit (Ctrl+C, kill, closing the terminal, or the web app's dotnet watch ending), stop everything
+# this script started: SIGTERM so the apps shut down cleanly, then, after up to 2 seconds, SIGKILL for
+# what's left, since dotnet watch treats SIGTERM as "stop the app" and keeps watching. Only this
+# script's own processes: `kill 0` would also hit whatever started the script when it isn't run from
+# an interactive terminal.
+cleanup() {
+  # Ignore further signals rather than restoring the defaults: a second Ctrl+C, or closing the
+  # terminal, during the wait below would otherwise kill the script before the SIGKILL pass, leaving
+  # dotnet watch running on its own.
+  trap - EXIT
+  trap '' INT TERM HUP
+  local pid attempt
   for pid in ${pids[@]+"${pids[@]}"}; do stop_tree "$pid" TERM; done
-  sleep 2
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    any_running || return 0
+    sleep 0.2
+  done
   for pid in ${pids[@]+"${pids[@]}"}; do stop_tree "$pid" KILL; done
 }
 trap cleanup EXIT
