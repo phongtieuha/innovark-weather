@@ -70,29 +70,30 @@ This project follows a test-driven mindset, summed up as _"Code is cheap now, bu
 
 Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) ProblemDetails with a `trace_id`:
 
-| Status | When                                                                                                                     |
-| ------ | ------------------------------------------------------------------------------------------------------------------------ |
-| 400    | `hour` in the future, more than 72 hours old, or outside 0–23 (under `errors.hour`); or a missing or malformed parameter |
-| 404    | Unknown route                                                                                                            |
-| 502    | Open-Meteo returned an error, or not all 10 hours with values                                                            |
-| 503    | Open-Meteo timed out or couldn't be reached, or the circuit breaker is open                                              |
-| 500    | Unexpected error; details are logged, not returned                                                                       |
+| Status | When                                                                                                                                |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `hour` in the future, more than 72 hours old, or outside 0–23 (under `errors.hour`); or a missing or malformed parameter            |
+| 404    | Unknown route                                                                                                                       |
+| 502    | Open-Meteo returned an error or unusable data (invalid JSON, missing fields, an unexpected offset), or not all 10 hours with values |
+| 503    | Open-Meteo timed out or couldn't be reached, or the circuit breaker is open                                                         |
+| 500    | Unexpected error; details are logged, not returned                                                                                  |
 
 Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /openapi/v1.json`. Sample requests are in `src/Innovark.Weather.Api/Innovark.Weather.Api.http`.
 
 ## Design decisions
 
-| Decision                                                  | Why                                                                                                                                  |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Historical Weather API** (`archive-api.open-meteo.com`) | Named in the task. For recent hours it serves model data until ERA5 reanalysis replaces it about 5 days later.                       |
-| **Request whole days, then keep the 10 hours**            | The archive API documents only `start_date`/`end_date`; a window crossing midnight requests two days                                 |
-| **Fixed +07:00 offset**, `timezone=Asia/Ho_Chi_Minh`      | Vietnam has no daylight saving time, and chiseled images have no time zone database. A response with a different offset is rejected. |
-| **`DateTimeOffset` and an injected `TimeProvider`**       | The offset is never lost, and tests can fix "now"                                                                                    |
-| **`date` + `hour` input**, not one `datetime`             | As the task specifies; avoids URL-encoding `+07:00` and rounding minutes                                                             |
-| **72 hours, current hour allowed**                        | "3 days" taken as 72 hours, applied to the requested hour; the oldest record can be up to 81 hours old                               |
-| **Requested hour first, newest first**                    | "Starting from the specified time and counting backwards"                                                                            |
-| **°F calculated**, rounded half away from zero            | One upstream call, and both values describe the same reading                                                                         |
-| **502 unless exactly the 10 expected hours have values**  | Never return partial data; comparing timestamps also catches gaps, duplicates and shifted windows                                    |
+| Decision                                                    | Why                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Historical Weather API** (`archive-api.open-meteo.com`)   | Named in the task. For recent hours it serves model data until ERA5 reanalysis replaces it about 5 days later.                                                                                                                                            |
+| **Request whole days, then keep the 10 hours**              | The archive API documents only `start_date`/`end_date`; a window crossing midnight UTC requests two days                                                                                                                                                  |
+| **Ask in UTC**, `timezone=GMT`, with the window's UTC dates | The archive accepts `end_date` only up to its current UTC date. From 00:00 to 07:00 UTC+7, Vietnam's date is a day ahead of that, so asking for Vietnam's dates would fail for the most recent hours. A response with an offset other than 0 is rejected. |
+| **Fixed +07:00 offset** for the output                      | Vietnam has no daylight saving time, and chiseled images have no time zone database. Hours are converted from UTC to +07:00.                                                                                                                              |
+| **`DateTimeOffset` and an injected `TimeProvider`**         | The offset is never lost, and tests can fix "now"                                                                                                                                                                                                         |
+| **`date` + `hour` input**, not one `datetime`               | As the task specifies; avoids URL-encoding `+07:00` and rounding minutes                                                                                                                                                                                  |
+| **72 hours, current hour allowed**                          | "3 days" taken as 72 hours, applied to the requested hour; the oldest record can be up to 81 hours old                                                                                                                                                    |
+| **Requested hour first, newest first**                      | "Starting from the specified time and counting backwards"                                                                                                                                                                                                 |
+| **°F calculated**, rounded half away from zero              | One upstream call, and both values describe the same reading                                                                                                                                                                                              |
+| **502 unless exactly the 10 expected hours have values**    | Never return partial data; comparing timestamps also catches gaps, duplicates and shifted windows                                                                                                                                                         |
 
 ## Architecture
 
@@ -176,17 +177,17 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 
 ## Testing
 
-`./scripts/run-tests.sh` runs offline tests; `./scripts/run-tests-with-explicit.sh` adds the live Open-Meteo test.
+`./scripts/run-tests.sh` runs offline tests; `./scripts/run-tests-with-explicit.sh` adds the live Open-Meteo tests.
 
 | Level       | Replaced                                                                                                                   |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Unit        | Open-Meteo (a stub handler serving a real saved response), the clock (`FakeTimeProvider`), and the client in service tests |
 | Integration | Only Open-Meteo's network and "now"; the real app runs in memory via `WebApplicationFactory`                               |
-| Live        | Nothing. It's explicit, so it runs only on request.                                                                        |
+| Live        | Nothing. They're explicit, so they run only on request: a window across midnight, and one up to the current hour           |
 
 Integration tests freeze only "now", with `FixedNowTimeProvider`. The resilience pipeline takes the same `TimeProvider` for its timeouts and retry delays, which a fully fake clock would stop, so requests would hang. The tests also shorten the resilience settings to milliseconds.
 
-Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme dates), the 10-hour window and newest-first order, upstream errors and bad data, timeouts, retries and the circuit breaker, caching including 20 simultaneous requests, and every status code.
+Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme dates), the UTC dates sent to Open-Meteo (including just after midnight in UTC+7), the 10-hour window and newest-first order, upstream errors and bad data, timeouts, retries and the circuit breaker, caching including 20 simultaneous requests, and every status code.
 
 ## Container
 
@@ -242,7 +243,7 @@ The API is public and read-only, with no user data, no database and no secrets, 
 | **Errors**                      | A 500 returns a generic ProblemDetails with no exception message, type or stack trace; the exception is only logged. A test checks this.                                                                      |
 | **Development tools**           | `/scalar` and `/openapi/v1.json` exist only in Development.                                                                                                                                                   |
 | **Container**                   | Chiseled image with no shell or package manager, a non-root user, a read-only root filesystem, and few packages.                                                                                              |
-| **JSON**                        | Source-generated serialization of fixed types; no polymorphic or dynamic deserialization.                                                                                                                     |
+| **JSON**                        | Open-Meteo's responses are read with source-generated deserialization into fixed types; no polymorphic or dynamic deserialization.                                                                            |
 | **CORS**                        | Not enabled, so browsers on other sites can't call the API.                                                                                                                                                   |
 
 Dependency vulnerability audit and static analysis, including security rules, run in every build (see [Code quality](#code-quality)).
@@ -266,7 +267,7 @@ Deliberately left out:
 
 **Delivery**
 
-- **CI:** a pipeline that builds, runs the tests and checks formatting on every push. It would also build the image, scan it with Trivy (failing on critical and high findings), and run the live Open-Meteo test nightly, without blocking pull requests.
+- **CI:** a pipeline that builds, runs the tests and checks formatting on every push. It would also build the image, scan it with Trivy (failing on critical and high findings), and run the live Open-Meteo tests nightly, without blocking pull requests.
 - **SonarCloud** in CI, for quality-gate reports and test coverage on pull requests.
 - **The same SDK everywhere:** pin the SDK feature band in `global.json`, CI and the Dockerfile. The image's newer SDK found an analyzer warning the local SDK didn't.
 

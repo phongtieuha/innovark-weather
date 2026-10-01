@@ -13,7 +13,7 @@ public class OpenMeteoClientTests
     private static readonly TimeSpan Plus7 = TimeSpan.FromHours(7);
     private static readonly Uri BaseUrl = new("https://archive-api.open-meteo.com/");
 
-    // Real archive response for 2026-09-27 and 2026-09-28 (48 hours) in Asia/Ho_Chi_Minh.
+    // Real archive response for the UTC days 2026-09-27 and 2026-09-28 (48 hours), timezone=GMT.
     private static readonly string TwoDayFixture =
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "open-meteo-archive-2026-09-27_28.json"));
 
@@ -22,11 +22,12 @@ public class OpenMeteoClientTests
     // --- Request ---
 
     [Fact]
-    public async Task GetHourlyAsync_SameDayWindow_RequestsOneLocalDayWithExpectedParameters()
+    public async Task GetHourlyAsync_SameUtcDayWindow_RequestsOneUtcDayWithExpectedParameters()
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture);
 
-        await GetHourlyAsync(handler, At(28, 5), At(28, 14));
+        // 08:00 to 17:00 in UTC+7 is 01:00Z to 10:00Z, all on 2026-09-28.
+        await GetHourlyAsync(handler, At(28, 8), At(28, 17));
 
         var request = handler.Requests.ShouldHaveSingleItem();
         request.Method.ShouldBe(HttpMethod.Get);
@@ -36,36 +37,52 @@ public class OpenMeteoClientTests
         query["latitude"].ShouldBe("10.762622");
         query["longitude"].ShouldBe("106.660172");
         query["hourly"].ShouldBe("temperature_2m,relative_humidity_2m");
-        query["timezone"].ShouldBe("Asia/Ho_Chi_Minh");
+        query["timezone"].ShouldBe("GMT");
         query["start_date"].ShouldBe("2026-09-28");
         query["end_date"].ShouldBe("2026-09-28");
     }
 
     [Fact]
-    public async Task GetHourlyAsync_WindowCrossingMidnight_RequestsBothLocalDays()
+    public async Task GetHourlyAsync_WindowCrossingUtcMidnight_RequestsBothUtcDays()
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture);
 
-        await GetHourlyAsync(handler, At(27, 18), At(28, 3));
+        // 05:00 to 14:00 in UTC+7 is 22:00Z on 2026-09-27 to 07:00Z on 2026-09-28.
+        await GetHourlyAsync(handler, At(28, 5), At(28, 14));
 
         var query = HttpUtility.ParseQueryString(handler.Requests.ShouldHaveSingleItem().RequestUri!.Query);
         query["start_date"].ShouldBe("2026-09-27");
         query["end_date"].ShouldBe("2026-09-28");
     }
 
+    // Regression: the window up to 00:00 in UTC+7 on 2026-09-28 ends at 17:00Z on 2026-09-27. Asking
+    // for Vietnam's date 2026-09-28 failed with 400 from Open-Meteo until 07:00 UTC+7, because it only
+    // accepts dates up to its current UTC date.
     [Fact]
-    public async Task GetHourlyAsync_WindowGivenInUtc_UsesVietnamLocalDates()
+    public async Task GetHourlyAsync_WindowUpToMidnightInUtcPlus7_DoesNotRequestTheUtcPlus7Date()
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture);
 
-        // 2026-09-27T20:00Z is 2026-09-28T03:00+07:00, so the UTC date differs from the local one.
-        await GetHourlyAsync(
-            handler,
-            new DateTimeOffset(2026, 9, 27, 20, 0, 0, TimeSpan.Zero),
-            new DateTimeOffset(2026, 9, 28, 5, 0, 0, TimeSpan.Zero));
+        await GetHourlyAsync(handler, At(27, 15), At(28, 0));
 
         var query = HttpUtility.ParseQueryString(handler.Requests.ShouldHaveSingleItem().RequestUri!.Query);
-        query["start_date"].ShouldBe("2026-09-28");
+        query["start_date"].ShouldBe("2026-09-27");
+        query["end_date"].ShouldBe("2026-09-27");
+    }
+
+    [Fact]
+    public async Task GetHourlyAsync_WindowGivenInAnyOffset_RequestsTheSameUtcDays()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture);
+
+        // The same instants as At(28, 5) to At(28, 14), given in UTC.
+        await GetHourlyAsync(
+            handler,
+            new DateTimeOffset(2026, 9, 27, 22, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 28, 7, 0, 0, TimeSpan.Zero));
+
+        var query = HttpUtility.ParseQueryString(handler.Requests.ShouldHaveSingleItem().RequestUri!.Query);
+        query["start_date"].ShouldBe("2026-09-27");
         query["end_date"].ShouldBe("2026-09-28");
     }
 
@@ -94,7 +111,17 @@ public class OpenMeteoClientTests
     }
 
     [Fact]
-    public async Task GetHourlyAsync_ParsedTimes_CarryTheReportedOffset()
+    public async Task GetHourlyAsync_WindowUpToMidnightInUtcPlus7_ReturnsTheTenHours()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture);
+
+        var result = await GetHourlyAsync(handler, At(27, 15), At(28, 0));
+
+        result.Select(r => r.Time).ShouldBe(Enumerable.Range(0, 10).Select(i => At(27, 15).AddHours(i)));
+    }
+
+    [Fact]
+    public async Task GetHourlyAsync_ParsedTimes_AreShownInUtcPlus7()
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, TwoDayFixture);
 
@@ -107,7 +134,7 @@ public class OpenMeteoClientTests
     [Fact]
     public async Task GetHourlyAsync_NullValues_ArePassedThrough()
     {
-        var json = HourlyJson(["2026-09-28T05:00", "2026-09-28T06:00"], "[null, 25.3]", "[98, null]");
+        var json = HourlyJson(["2026-09-27T22:00", "2026-09-27T23:00"], "[null, 25.3]", "[98, null]");
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, json);
 
         var result = await GetHourlyAsync(handler, At(28, 5), At(28, 6));
@@ -123,7 +150,7 @@ public class OpenMeteoClientTests
     [InlineData("56.5", 57)]
     public async Task GetHourlyAsync_Humidity_IsRoundedHalfAwayFromZero(string humidity, int expected)
     {
-        var json = HourlyJson(["2026-09-28T05:00"], "[25.3]", $"[{humidity}]");
+        var json = HourlyJson(["2026-09-27T22:00"], "[25.3]", $"[{humidity}]");
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, json);
 
         var result = await GetHourlyAsync(handler, At(28, 5), At(28, 5));
@@ -136,7 +163,8 @@ public class OpenMeteoClientTests
     [Fact]
     public async Task GetHourlyAsync_UnexpectedUtcOffset_Throws()
     {
-        var json = HourlyJson(["2026-09-28T05:00"], "[25.3]", "[98]", utcOffsetSeconds: 0);
+        // What the old request (timezone=Asia/Ho_Chi_Minh) returned: UTC+7 clock times.
+        var json = HourlyJson(["2026-09-28T05:00"], "[25.3]", "[98]", utcOffsetSeconds: 25200);
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, json);
 
         var ex = await Should.ThrowAsync<OpenMeteoException>(() => GetHourlyAsync(handler, At(28, 5), At(28, 5)));
@@ -147,7 +175,7 @@ public class OpenMeteoClientTests
     [Fact]
     public async Task GetHourlyAsync_MismatchedArrayLengths_Throws()
     {
-        var json = HourlyJson(["2026-09-28T05:00", "2026-09-28T06:00"], "[25.3]", "[98, 97]");
+        var json = HourlyJson(["2026-09-27T22:00", "2026-09-27T23:00"], "[25.3]", "[98, 97]");
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, json);
 
         await Should.ThrowAsync<OpenMeteoException>(() => GetHourlyAsync(handler, At(28, 5), At(28, 6)));
@@ -156,7 +184,7 @@ public class OpenMeteoClientTests
     [Fact]
     public async Task GetHourlyAsync_MissingHourlyData_Throws()
     {
-        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, """{ "utc_offset_seconds": 25200 }""");
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, """{ "utc_offset_seconds": 0 }""");
 
         await Should.ThrowAsync<OpenMeteoException>(() => GetHourlyAsync(handler, At(28, 5), At(28, 6)));
     }
@@ -227,7 +255,8 @@ public class OpenMeteoClientTests
             Longitude = 106.660172,
         });
 
-    private static string HourlyJson(string[] times, string temperatures, string humidities, int utcOffsetSeconds = 25200) =>
+    // Times are UTC clock readings, as Open-Meteo returns them for timezone=GMT.
+    private static string HourlyJson(string[] times, string temperatures, string humidities, int utcOffsetSeconds = 0) =>
         $$"""
         {
           "utc_offset_seconds": {{utcOffsetSeconds}},

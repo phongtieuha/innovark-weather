@@ -177,11 +177,14 @@ public class WeatherHistoryEndpointTests
     [Fact]
     public async Task Get_IncompleteUpstreamData_Returns502()
     {
-        // 9 of the 10 hours: 05:00 is missing.
-        var times = Enumerable.Range(6, 9).Select(h => $"\"2026-09-28T{h:00}:00\"");
+        // 9 of the 10 hours: 05:00 in UTC+7 (22:00Z the day before) is missing. Times are UTC, as
+        // Open-Meteo returns them for timezone=GMT: 06:00 to 14:00 in UTC+7 is 23:00Z to 07:00Z.
+        var times = Enumerable.Range(23, 9)
+            .Select(h => new DateTime(2026, 9, 27, 0, 0, 0, DateTimeKind.Utc).AddHours(h))
+            .Select(t => $"\"{t:yyyy-MM-dd'T'HH:mm}\"");
         var openMeteo = StubOpenMeteoHandler.Json(HttpStatusCode.OK, $$"""
             {
-              "utc_offset_seconds": 25200,
+              "utc_offset_seconds": 0,
               "hourly": {
                 "time": [{{string.Join(",", times)}}],
                 "temperature_2m": [25, 26, 27, 28, 29, 30, 31, 32, 33],

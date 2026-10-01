@@ -1,12 +1,21 @@
 # Sample requests. Dates are in UTC+7 and must be within the last 72 hours
 @host = http://localhost:5122
 # Update @date before sending.
-@date = 2026-09-30 
+@date = 2026-10-01
 
 # Relative to today, 2 days ago is always within 72 hours;
 # 5 days ago is always outside it, whatever the time of day or the machine's time zone.
 @twoDaysAgo = {{$localDatetime "YYYY-MM-DD" -2 d}}
 @fiveDaysAgo = {{$localDatetime "YYYY-MM-DD" -5 d}}
+
+# Today's date and the current hour in UTC+7, whatever the machine's time zone ($datetime is UTC,
+# shifted by 7 hours). The hour is zero-padded, e.g. 01, which the API accepts.
+@todayUtcPlus7 = {{$datetime "YYYY-MM-DD" 7 h}}
+@currentHourUtcPlus7 = {{$datetime "HH" 7 h}}
+
+# The same hour 72 hours earlier in UTC+7: UTC + 7 hours - 72 hours = UTC - 65 hours.
+@seventyTwoHoursAgoDate = {{$datetime "YYYY-MM-DD" -65 h}}
+@seventyTwoHoursAgoHour = {{$datetime "HH" -65 h}}
 
 ### 200: within the last 2 days
 GET {{host}}/api/v1/weather/history?date={{twoDaysAgo}}&hour=12
@@ -14,6 +23,14 @@ Accept: application/json
 
 ### 200: Window crossing midnight (01:00 back to 16:00 the previous day)
 GET {{host}}/api/v1/weather/history?date={{date}}&hour=1
+Accept: application/json
+
+### 200: today at the current hour in UTC+7, the newest hour allowed
+GET {{host}}/api/v1/weather/history?date={{todayUtcPlus7}}&hour={{currentHourUtcPlus7}}
+Accept: application/json
+
+### 200: the current hour minus 72 hours in UTC+7, the oldest hour allowed (one hour earlier is 400)
+GET {{host}}/api/v1/weather/history?date={{seventyTwoHoursAgoDate}}&hour={{seventyTwoHoursAgoHour}}
 Accept: application/json
 
 ### 400: more than 3 days (72 hours) in the past (5 days ago at 10:00)
