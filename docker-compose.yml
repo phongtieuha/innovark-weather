@@ -1,6 +1,10 @@
-# Local run of the production image, with a read-only root filesystem.
-# Development environment by default, so the Scalar UI is available at http://localhost:5122/scalar.
-# Run with production settings: ASPNETCORE_ENVIRONMENT=Production docker compose up --build
+# Local run of the production images, with read-only root filesystems. The web app is at
+# http://localhost:5048.
+#
+# Production (this file only): the API is reachable only from the web app, inside the compose network.
+#   docker compose -f docker-compose.yml up --build
+# Development (`docker compose up --build`): docker-compose.override.yml is merged on top, publishing
+# the API on http://localhost:5122 in Development, with Scalar at /scalar.
 
 # Groups the containers as "innovark-weather" in Docker Desktop, whatever the folder is called.
 name: innovark-weather
@@ -9,9 +13,24 @@ services:
   api:
     build: .
     image: innovark-weather-api
-    # Host port 5122, the same as ./scripts/run-api.sh and the .http file; the container listens on 8080.
-    ports:
-      - "5122:8080"
+    # No published port: the API is internal. The web app calls it at http://api:8080.
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_ENVIRONMENT: Production
+    read_only: true
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: innovark-weather-web
+    # Host port 5048, the same as ./scripts/run-web.sh; the container listens on 8080.
+    ports:
+      - "5048:8080"
+    environment:
+      # Always Production: in Development the page loads its scripts from the Vite dev server
+      # (run-web.sh), which isn't in the container; Production serves the built bundle.
+      ASPNETCORE_ENVIRONMENT: Production
+      WeatherApi__BaseUrl: http://api:8080
+    depends_on:
+      - api
     read_only: true

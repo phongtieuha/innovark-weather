@@ -27,11 +27,12 @@ Requires the .NET 10 SDK, or only Docker to run the container.
 # Run the web app on http://localhost:5048, with the API it calls (needs bun; installs packages on first run)
 ./scripts/run-web.sh
 
-# Or run the container on the same port (Scalar UI at http://localhost:5122/scalar)
+# Or run both in containers: the web app on http://localhost:5048, the API on http://localhost:5122
+# (Development, Scalar UI at /scalar)
 docker compose up --build
 
-# The same container with production settings (JSON logs, no Scalar)
-ASPNETCORE_ENVIRONMENT=Production docker compose up --build
+# Production settings: the API only inside the compose network (JSON logs, no Scalar)
+docker compose -f docker-compose.yml up --build
 ```
 
 The scripts work from any directory. Without bash, for example on Windows, run the same commands from the repository root:
@@ -158,7 +159,7 @@ tests/
 └── Innovark.Weather.Web.IntegrationTests/  # The web app in memory, with a stub in place of the API
 scripts/                                # run-api.sh, run-web.sh, generate-api-clients.sh and the test scripts
 Directory.Build.props, Directory.Packages.props, global.json   # shared build settings, package versions, SDK
-Dockerfile, docker-compose.yml
+Dockerfile, Dockerfile.web, docker-compose.yml, docker-compose.override.yml
 ```
 
 Dependencies point inward:
@@ -244,7 +245,9 @@ Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme date
 
 ## Container
 
-The `Dockerfile` builds a multi-stage image on `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled`: about >100 MB, no shell, no package manager, running as a non-root user. `docker-compose.yml` runs it as the `innovark-weather` project with a read-only root filesystem.
+The `Dockerfile` builds a multi-stage image on `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled`: about >100 MB, no shell, no package manager, running as a non-root user. `Dockerfile.web` builds the web app the same way; its build stage also has bun, since a Release publish runs Vite for the page's bundle.
+
+`docker-compose.yml` runs both as the `innovark-weather` project, with read-only root filesystems, in production settings: only the web app is published, on host port 5048 (the same as `run-web.sh`), and the API has no published port; the web app reaches it at `http://api:8080` inside the compose network. `docker compose up` also merges `docker-compose.override.yml`, which publishes the API on host port 5122 in Development, for Scalar and the `.http` samples; `docker compose -f docker-compose.yml up` leaves it out. The web container always runs in Production, since Development loads the page's scripts from the Vite dev server. It logs that ASP.NET Data Protection keeps its keys in memory (the filesystem is read-only); the app uses no cookies or antiforgery tokens, so nothing depends on them.
 
 Build and check locally:
 
@@ -333,7 +336,6 @@ Deliberately left out:
 **Features**
 
 - **Many locations:** coordinates as a request parameter, prefetching popular locations, and maybe Open-Meteo's FlatBuffers format for large ranges.
-- **Web UI:** show the 10 records in a table, and serve the web app from a container too.
 
 ## Editor
 
