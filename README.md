@@ -48,7 +48,7 @@ dotnet test -- --explicit on
 
 ## Approach
 
-This project follows a test-driven mindset, summed up as _"Code is cheap now, but quality is not."_ Every piece of code is written together with its tests: no feature, endpoint or fix is added without them.
+This project follows a test-driven mindset with slogan as _"Code is cheap now, but quality is not."_ Every piece of code is written together with its tests: no feature, endpoint or fix is added without them.
 
 ## API
 
@@ -84,13 +84,13 @@ Also: `GET /health`, and in Development `GET /scalar` (API docs) and `GET /opena
 
 | Decision                                                    | Why                                                                                                                                                                                                                                                       |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Historical Weather API** (`archive-api.open-meteo.com`)   | Named in the task. For recent hours it serves model data until ERA5 reanalysis replaces it about 5 days later.                                                                                                                                            |
-| **Request whole days, then keep the 10 hours**              | The archive API documents only `start_date`/`end_date`; a window crossing midnight UTC requests two days                                                                                                                                                  |
+| **Historical Weather API** (`archive-api.open-meteo.com`)   | Named in the task.                                                                                                                                                                                                                                        |
+| **Request whole days, then keep the 10 hours**              | The archive API supports only `start_date`/`end_date`; a window crossing midnight UTC requests two days                                                                                                                                                   |
 | **Ask in UTC**, `timezone=GMT`, with the window's UTC dates | The archive accepts `end_date` only up to its current UTC date. From 00:00 to 07:00 UTC+7, Vietnam's date is a day ahead of that, so asking for Vietnam's dates would fail for the most recent hours. A response with an offset other than 0 is rejected. |
 | **Fixed +07:00 offset** for the output                      | Vietnam has no daylight saving time, and chiseled images have no time zone database. Hours are converted from UTC to +07:00.                                                                                                                              |
 | **`DateTimeOffset` and an injected `TimeProvider`**         | The offset is never lost, and tests can fix "now"                                                                                                                                                                                                         |
 | **`date` + `hour` input**, not one `datetime`               | As the task specifies; avoids URL-encoding `+07:00` and rounding minutes                                                                                                                                                                                  |
-| **72 hours, current hour allowed**                          | "3 days" taken as 72 hours, applied to the requested hour; the oldest record can be up to 81 hours old                                                                                                                                                    |
+| **72 hours, current hour allowed**                          | "3 days" taken as 72 hours, applied to the requested hour                                                                                                                                                                                                 |
 | **Requested hour first, newest first**                      | "Starting from the specified time and counting backwards"                                                                                                                                                                                                 |
 | **°F calculated**, rounded half away from zero              | One upstream call, and both values describe the same reading                                                                                                                                                                                              |
 | **502 unless exactly the 10 expected hours have values**    | Never return partial data; comparing timestamps also catches gaps, duplicates and shifted windows                                                                                                                                                         |
@@ -192,7 +192,7 @@ Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme date
 
 ## Container
 
-The `Dockerfile` builds a multi-stage image on `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled`: about 128 MB, no shell, no package manager, running as a non-root user. `docker-compose.yml` runs it as the `innovark-weather` project with a read-only root filesystem.
+The `Dockerfile` builds a multi-stage image on `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled`: about >100 MB, no shell, no package manager, running as a non-root user. `docker-compose.yml` runs it as the `innovark-weather` project with a read-only root filesystem.
 
 Build and check locally:
 
@@ -281,7 +281,7 @@ Deliberately left out:
 **Features**
 
 - **Many locations:** coordinates as a request parameter, prefetching popular locations, and maybe Open-Meteo's FlatBuffers format for large ranges.
-- **A web UI** (Vite, React, Tailwind, shadcn/ui) served from the same container.
+- **A web UI** (Vite, React, Tailwind, shadcn/ui) served from the same container. Actively in development on the [`feat/web`](https://github.com/phongtieuha/innovark-weather/tree/feat/web) branch.
 
 ## Editor
 
