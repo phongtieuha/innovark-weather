@@ -140,6 +140,7 @@ The Open-Meteo client uses .NET's standard resilience handler (`Microsoft.Extens
 
 - **Only transient failures are retried:** 5xx, 408, 429, connection errors and timeouts. A 400 from Open-Meteo means the request is wrong and won't succeed on retry.
 - **A missing `Resilience` section falls back to the library defaults** instead of failing at startup.
+- **Tested:** a test boots the app with `appsettings.json` alone and checks every value in the table, so a changed value or a misspelled key (which config binding silently ignores) fails the tests. Other tests count the calls that reach Open-Meteo: each transient status and connection errors are retried, 400 and 404 aren't, the total timeout stops retries early, and an open circuit makes no call.
 
 ### Caching
 
@@ -187,7 +188,7 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 
 Integration tests freeze only "now", with `FixedNowTimeProvider`. The resilience pipeline takes the same `TimeProvider` for its timeouts and retry delays, which a fully fake clock would stop, so requests would hang. The tests also shorten the resilience settings to milliseconds.
 
-Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme dates), the UTC dates sent to Open-Meteo (including just after midnight in UTC+7), the 10-hour window and newest-first order, upstream errors and bad data, timeouts, retries and the circuit breaker, caching including 20 simultaneous requests, and every status code.
+Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme dates), the UTC dates sent to Open-Meteo (including just after midnight in UTC+7), the 10-hour window and newest-first order, upstream errors and bad data, the shipped resilience settings, which failures are retried (408, 429, 5xx and connection errors, but not 400 or 404), attempt and total timeouts, the circuit breaker, caching including 20 simultaneous requests, and every status code.
 
 ## Container
 

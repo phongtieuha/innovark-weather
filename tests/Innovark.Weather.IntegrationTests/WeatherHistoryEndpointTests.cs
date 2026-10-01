@@ -149,23 +149,30 @@ public class WeatherHistoryEndpointTests
         openMeteo.RequestCount.ShouldBe(3);   // the first attempt + 2 retries (appsettings.json)
     }
 
-    [Fact]
-    public async Task Get_UpstreamBadRequest_IsNotRetried()
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task Get_NonTransientUpstreamError_IsNotRetried(HttpStatusCode status)
     {
-        var openMeteo = StubOpenMeteoHandler.Json(
-            HttpStatusCode.BadRequest, """{ "error": true, "reason": "Invalid timezone" }""");
+        var openMeteo = StubOpenMeteoHandler.Json(status, """{ "error": true, "reason": "Invalid timezone" }""");
         await using var factory = new WeatherApiFactory(openMeteo);
 
         var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
-        openMeteo.RequestCount.ShouldBe(1);   // a 400 will not succeed on retry
+        openMeteo.RequestCount.ShouldBe(1);   // a client error will not succeed on retry
     }
 
-    [Fact]
-    public async Task Get_TransientUpstreamFailure_IsRetriedAndSucceeds()
+    [Theory]
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    public async Task Get_TransientUpstreamError_IsRetriedAndSucceeds(HttpStatusCode status)
     {
-        var openMeteo = StubOpenMeteoHandler.Sequence(HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK);
+        var openMeteo = StubOpenMeteoHandler.Sequence(status, HttpStatusCode.OK);
         await using var factory = new WeatherApiFactory(openMeteo);
 
         var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
@@ -216,14 +223,33 @@ public class WeatherHistoryEndpointTests
     }
 
     [Fact]
-    public async Task Get_UpstreamUnreachable_Returns503()
+    public async Task Get_TotalTimeoutReached_StopsRetryingAndReturns503()
     {
-        await using var factory = new WeatherApiFactory(
-            StubOpenMeteoHandler.Throws(new HttpRequestException("Connection refused")));
+        // Attempts time out after 500 ms, but the whole request only has 700 ms: the first retry starts
+        // at about 510 ms and is cut off by the total timeout; a second retry would need over 1 s.
+        var openMeteo = StubOpenMeteoHandler.NeverResponds();
+        await using var factory = new WeatherApiFactory(openMeteo, new Dictionary<string, string?>
+        {
+            ["OpenMeteo:Resilience:AttemptTimeout:Timeout"] = "00:00:00.500",
+            ["OpenMeteo:Resilience:TotalRequestTimeout:Timeout"] = "00:00:00.700",
+        });
 
         var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        openMeteo.RequestCount.ShouldBe(2);   // not 3: the retries ended with the total budget
+    }
+
+    [Fact]
+    public async Task Get_UpstreamUnreachable_RetriesThenReturns503()
+    {
+        var openMeteo = StubOpenMeteoHandler.Throws(new HttpRequestException("Connection refused"));
+        await using var factory = new WeatherApiFactory(openMeteo);
+
+        var response = await factory.CreateClient().GetAsync($"{Endpoint}?date=2026-09-28&hour=14", Ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);
+        openMeteo.RequestCount.ShouldBe(3);   // connection errors are transient: the first attempt + 2 retries
     }
 
     [Fact]
