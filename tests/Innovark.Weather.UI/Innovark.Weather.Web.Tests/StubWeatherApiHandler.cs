@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 
-namespace Innovark.Weather.Web.IntegrationTests;
+namespace Innovark.Weather.Web.Tests;
 
 /// <summary>Stands in for Innovark.Weather.Api: records the request and returns a canned response.</summary>
 internal sealed class StubWeatherApiHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

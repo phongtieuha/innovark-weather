@@ -20,7 +20,7 @@ Requires the .NET 10 SDK, or only Docker to run the container.
 # Run the API on http://localhost:5122 (Scalar UI at /scalar)
 ./scripts/run-api.sh
 
-# Run the tests without live
+# Run the tests without live (.NET, then the UI's with bun)
 ./scripts/run-tests.sh
 
 # Run the tests with live
@@ -95,10 +95,28 @@ A one-page web app for the same request: a form with a date and an hour (UTC+7),
 ./scripts/generate-api-clients.sh   # after an endpoint change: regenerate the Kiota and Orval clients
 
 cd src/Innovark.Weather.UI
-bun install                                          # once: installs the three workspace packages
+bun install                                          # once: installs the workspace packages, and the UI tests
 bun run --cwd Innovark.Weather.Storybook storybook   # Storybook on http://localhost:6006
 bun run --cwd Innovark.Weather.Storybook test        # every story as a test, in headless Chromium
-bun run format:check                                 # Prettier, for the three packages only
+bun run format:check                                 # Prettier, for the three packages
+```
+
+The UI's tests are in `tests/Innovark.Weather.UI`; `./scripts/run-ui-tests.sh` runs both packages' tests and type-checks, and `./scripts/run-tests.sh` runs it after the .NET tests. Each package also has its own commands (from the repo root):
+
+```bash
+cd tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests
+bun run test                                         # the component tests, in happy-dom
+bun run test:coverage                                # the same, with a coverage report (fails under 80%)
+bun run check-types                                  # TypeScript; Vitest runs tests without checking types
+bun run format:check                                 # Prettier, for the component tests
+```
+
+```bash
+cd tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests   # `dotnet test` runs this folder's .NET tests
+bun run test                                         # the Home page, its schema, and the generated client's drift
+bun run test:coverage                                # the same, with a coverage report (fails under 80%)
+bun run check-types                                  # TypeScript; Vitest runs tests without checking types
+bun run format:check                                 # Prettier, for the page's tests
 ```
 
 | Package                       | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -158,7 +176,9 @@ src/
 tests/
 ├── Innovark.Weather.UnitTests/         # Application and Infrastructure, no network
 ├── Innovark.Weather.IntegrationTests/      # The full API in memory via WebApplicationFactory
-└── Innovark.Weather.Web.IntegrationTests/  # The web app in memory, with a stub in place of the API
+└── Innovark.Weather.UI/
+    ├── Innovark.Weather.Components.Tests/      # The components and their helpers (Vitest, Testing Library)
+    └── Innovark.Weather.Web.Tests/             # The web app in memory with a stub API (xUnit), and its page (Vitest)
 scripts/                                # run-api.sh, run-web.sh, generate-api-clients.sh and the test scripts
 Directory.Build.props, Directory.Packages.props, global.json   # shared build settings, package versions, SDK
 Dockerfile, Dockerfile.web, docker-compose.yml, docker-compose.override.yml
@@ -232,7 +252,7 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 
 ## Testing
 
-`./scripts/run-tests.sh` runs offline tests; `./scripts/run-tests-with-explicit.sh` adds the live Open-Meteo tests.
+`./scripts/run-tests.sh` runs offline tests: `dotnet test`, then the UI's Vitest tests and type-checks (`./scripts/run-ui-tests.sh`). `./scripts/run-tests-with-explicit.sh` adds the live Open-Meteo tests.
 
 | Level       | Replaced                                                                                                                   |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -240,6 +260,8 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 | Integration | Only Open-Meteo's network and "now"; the real app runs in memory via `WebApplicationFactory`                               |
 | Live        | Nothing. They're explicit, so they run only on request: a window across midnight, and one up to the current hour           |
 | Web         | Storybook runs every story in Chromium with its play function and a11y checks                                              |
+| Components  | Only `fetch`, in the API helper's tests; the components render in happy-dom with Testing Library                           |
+| Page        | Only `fetch` and the clock; the Home page renders in happy-dom, and its Orval client is regenerated to check drift         |
 
 Integration tests freeze only "now", with `FixedNowTimeProvider`. The resilience pipeline takes the same `TimeProvider` for its timeouts and retry delays, which a fully fake clock would stop, so requests would hang. The tests also shorten the resilience settings to milliseconds.
 
@@ -275,7 +297,7 @@ Quality rules run in the build itself, so they apply the same way in every edito
 | Nullable reference types | Possible null dereferences (`CS86xx`)                                                                                        | `dotnet build`                                                |
 | Vulnerable packages      | Known vulnerabilities in NuGet dependencies (NuGet audit, e.g. `NU1903`)                                                     | `dotnet restore`                                              |
 | Formatting               | Indentation, spacing, LF line endings and `using` order from `.editorconfig`; `.gitattributes` keeps LF in git               | VS Code on format, and `dotnet format whitespace` (see below) |
-| Tests                    | Unit and integration tests                                                                                                   | `./scripts/run-tests.sh`                                      |
+| Tests                    | Unit, integration and UI tests, and the UI tests' type-checks                                                                | `./scripts/run-tests.sh`                                      |
 
 Rule exceptions are made in `.editorconfig`, one rule at a time, with the reason in a comment. Currently there is one: CA1707 is off for `tests/`, so test names can use `Method_Scenario_Expected`.
 

@@ -6,7 +6,9 @@
   "workspaces": [
     "Innovark.Weather.Components",
     "Innovark.Weather.Storybook",
-    "Innovark.Weather.Web"
+    "Innovark.Weather.Web",
+    "../../tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests",
+    "../../tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests"
   ],
   "scripts": {
     "format": "prettier --write .",

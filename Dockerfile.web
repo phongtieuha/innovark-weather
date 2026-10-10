@@ -24,6 +24,9 @@ COPY src/Innovark.Weather.UI/package.json src/Innovark.Weather.UI/bun.lock src/I
 COPY src/Innovark.Weather.UI/Innovark.Weather.Components/package.json src/Innovark.Weather.UI/Innovark.Weather.Components/
 COPY src/Innovark.Weather.UI/Innovark.Weather.Storybook/package.json src/Innovark.Weather.UI/Innovark.Weather.Storybook/
 COPY src/Innovark.Weather.UI/Innovark.Weather.Web/package.json src/Innovark.Weather.UI/Innovark.Weather.Web/
+# Workspace members too (the UI tests), so the lockfile matches; only their manifests are needed.
+COPY tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests/package.json tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests/
+COPY tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/package.json tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/
 RUN cd src/Innovark.Weather.UI && bun install --frozen-lockfile
 
 COPY src/Innovark.Weather.UI/ src/Innovark.Weather.UI/

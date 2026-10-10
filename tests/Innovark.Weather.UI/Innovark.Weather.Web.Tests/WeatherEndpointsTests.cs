@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Shouldly;
 
-namespace Innovark.Weather.Web.IntegrationTests;
+namespace Innovark.Weather.Web.Tests;
 
 public class WeatherEndpointsTests
 {

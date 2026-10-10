@@ -490,3 +490,6 @@ node_modules/
 src/Innovark.Weather.UI/Innovark.Weather.Web/wwwroot/js/build/
 storybook-static/
 .kiota.log
+
+# UI tests (tests/Innovark.Weather.UI)
+tests/Innovark.Weather.UI/*/coverage/

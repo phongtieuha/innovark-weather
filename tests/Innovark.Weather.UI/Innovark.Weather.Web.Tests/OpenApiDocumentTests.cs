@@ -1,8 +1,9 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Shouldly;
 
-namespace Innovark.Weather.Web.IntegrationTests;
+namespace Innovark.Weather.Web.Tests;
 
 /// <summary>
 /// The OpenAPI document (served in Development, and written to openapi.json on each Debug build) is
@@ -54,6 +55,21 @@ public class OpenApiDocumentTests
         Property(schemas, "WeatherHistoryRecord", "relativeHumidity").GetProperty("type").GetString().ShouldBe("integer");
     }
 
+    [Fact]
+    public async Task OpenApiDocument_MatchesTheCommittedOpenApiJson()
+    {
+        // openapi.json (committed, next to the web app's .csproj) is what Orval generates the page's
+        // client from. A Debug build rewrites it, but a Release build or an uncommitted rewrite leaves
+        // it behind the endpoints, and the page's client with it. Fix: build in Debug, then run
+        // ./scripts/generate-api-clients.sh.
+        using var served = await GetDocumentAsync();
+        using var committed = JsonDocument.Parse(
+            await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "openapi.json"), Ct));
+
+        // The served document names the server it was requested from; the build's has none.
+        WithoutServers(served.RootElement).ShouldBe(WithoutServers(committed.RootElement));
+    }
+
     [Theory]
     [InlineData("date=2026-09-28&hour=abc")]   // hour not a number
     [InlineData("date=2026-09-28")]            // missing hour
@@ -69,4 +85,14 @@ public class OpenApiDocumentTests
 
     private static JsonElement Property(JsonElement schemas, string schema, string property) =>
         schemas.GetProperty(schema).GetProperty("properties").GetProperty(property);
+
+    // Indented JSON without the top-level "servers", so a mismatch shows up as a readable diff.
+    private static string WithoutServers(JsonElement document)
+    {
+        var node = JsonNode.Parse(document.GetRawText())!.AsObject();
+        node.Remove("servers");
+        return node.ToJsonString(IndentedJson);
+    }
+
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
 }

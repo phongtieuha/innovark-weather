@@ -1,0 +1,6 @@
+# The .NET test project's own files keep their formatting (.editorconfig, dotnet format).
+bin
+obj
+xunit.runner.json
+
+coverage

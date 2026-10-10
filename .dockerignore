@@ -9,6 +9,9 @@
 .vscode/
 .idea/
 tests/
+# Except the UI tests' manifests: the bun workspace lists those packages (see Dockerfile.web).
+!tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests/package.json
+!tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/package.json
 scripts/
 *.md
 docs/

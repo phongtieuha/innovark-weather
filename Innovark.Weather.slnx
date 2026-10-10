@@ -8,6 +8,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Innovark.Weather.IntegrationTests/Innovark.Weather.IntegrationTests.csproj" />
     <Project Path="tests/Innovark.Weather.UnitTests/Innovark.Weather.UnitTests.csproj" />
-    <Project Path="tests/Innovark.Weather.Web.IntegrationTests/Innovark.Weather.Web.IntegrationTests.csproj" />
+    <Project Path="tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/Innovark.Weather.Web.Tests.csproj" />
   </Folder>
 </Solution>

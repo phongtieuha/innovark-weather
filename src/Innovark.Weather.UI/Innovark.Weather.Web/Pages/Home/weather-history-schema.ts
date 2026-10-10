@@ -33,15 +33,15 @@ function isWithinLastThreeDays(date: string, latestMs: number): boolean {
 export function weatherHistorySchema(now: () => Date = () => new Date()) {
   return (
     z
-      // The form's fields, with the form's own messages. `abort` stops at a field's first failed
-      // check, so each field shows one message.
+      // The form's fields, with the form's own messages. Each field shows one message: no two of a
+      // field's checks can fail together, except an empty date, which `abort` stops at "Choose a date.".
       .object({
         date: z
           .string()
           .min(1, { message: "Choose a date.", abort: true })
+          // A future date is within the last 3 days too, so the next check never fails with it.
           .refine((date) => !isInTheFuture(date, currentHourMs(now())), {
             message: "This date is in the future.",
-            abort: true,
           })
           .refine((date) => isWithinLastThreeDays(date, currentHourMs(now())), {
             message: "Choose a date within the last 3 days.",
@@ -52,8 +52,9 @@ export function weatherHistorySchema(now: () => Date = () => new Date()) {
             error: (issue) =>
               issue.input === undefined ? "Enter an hour." : "Enter a whole hour from 0 to 23.",
           })
-          .int({ message: "Enter a whole hour from 0 to 23.", abort: true })
-          .min(0, { message: "Enter a whole hour from 0 to 23.", abort: true })
+          // A failed `int` stops the field's checks by itself, and an hour below 0 isn't above 23.
+          .int({ message: "Enter a whole hour from 0 to 23." })
+          .min(0, { message: "Enter a whole hour from 0 to 23." })
           .max(23, { message: "Enter a whole hour from 0 to 23." }),
       }) satisfies z.ZodType<GetWeatherHistoryParams>
   )

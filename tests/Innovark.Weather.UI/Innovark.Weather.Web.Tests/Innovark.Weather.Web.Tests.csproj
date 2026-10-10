@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- The page's Vitest tests share this folder (see package.json); their packages and coverage
+         report aren't part of this project. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);node_modules/**;coverage/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The committed OpenAPI document, which the page's Orval client is generated from. -->
+    <Content Include="..\..\..\src\Innovark.Weather.UI\Innovark.Weather.Web\openapi.json" Link="openapi.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Innovark.Weather.UI\Innovark.Weather.Web\Innovark.Weather.Web.csproj" />
+  </ItemGroup>
+
+</Project>
