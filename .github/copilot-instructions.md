@@ -73,7 +73,9 @@ Folders mirror `src/`, with one test class per class under test, named `<Class>T
 - Tests against the real Open-Meteo API are `[Fact(Explicit = true)]` with `[Trait("Category", "Live")]`, so they only run on request.
 - Registration methods (`AddApplication`, `AddInfrastructure`) have their own `DependencyInjectionTests`.
 
-Run `./scripts/run-tests.sh` before committing: it runs the .NET tests, then the UI's tests and type-checks (`./scripts/run-ui-tests.sh`). The build treats warnings as errors.
+Run `./scripts/test-all.sh` before committing: it runs the .NET tests, then the UI's tests and type-checks (`./scripts/test-ui.sh`). The build treats warnings as errors.
+
+`./scripts/test-all-with-coverage.sh` adds code coverage and fails below its minimums (.NET: 95% of lines and 85% of branches; UI: 80%). New code comes with tests that keep coverage at or above them. The .NET minimums are a ratchet: raise them when coverage grows, never lower them to make a change pass. Exclude code only with `[ExcludeFromCodeCoverage]` and a comment saying why.
 
 ## Formatting
 

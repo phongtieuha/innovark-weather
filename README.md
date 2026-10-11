@@ -20,11 +20,14 @@ Requires the .NET 10 SDK, or only Docker to run the container.
 # Run the API on http://localhost:5122 (Scalar UI at /scalar)
 ./scripts/run-api.sh
 
-# Run the tests without live (.NET, then the UI's with bun)
-./scripts/run-tests.sh
+# Run the tests without live (.NET, then the UI's with bun); or one side: test-dotnet.sh, test-ui.sh
+./scripts/test-all.sh
 
 # Run the tests with live
-./scripts/run-tests-with-explicit.sh
+./scripts/test-all-with-live.sh
+
+# Run the tests without live, with code coverage (report in coverage/index.html)
+./scripts/test-all-with-coverage.sh
 
 # Run the web app on http://localhost:5048, with the API it calls (needs bun; installs packages on first run)
 ./scripts/run-web.sh
@@ -50,7 +53,7 @@ dotnet test
 dotnet test -- --explicit on
 ```
 
-`run-api.sh` uses `dotnet watch`, so code changes are hot-reloaded. Extra arguments go to `dotnet watch run` or `dotnet test`, for example `./scripts/run-tests.sh -c Release`.
+`run-api.sh` uses `dotnet watch`, so code changes are hot-reloaded. Extra arguments go to `dotnet watch run` or `dotnet test`, for example `./scripts/test-all.sh -c Release`.
 
 ## Approach
 
@@ -101,7 +104,7 @@ bun run --cwd Innovark.Weather.Storybook test        # every story as a test, in
 bun run format:check                                 # Prettier, for the three packages
 ```
 
-The UI's tests are in `tests/Innovark.Weather.UI`; `./scripts/run-ui-tests.sh` runs both packages' tests and type-checks, and `./scripts/run-tests.sh` runs it after the .NET tests. Each package also has its own commands (from the repo root):
+The UI's tests are in `tests/Innovark.Weather.UI`; `./scripts/test-ui.sh` runs both packages' tests and type-checks, and `./scripts/test-all.sh` runs it after the .NET tests. Each package also has its own commands (from the repo root):
 
 ```bash
 cd tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests
@@ -252,7 +255,7 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 
 ## Testing
 
-`./scripts/run-tests.sh` runs offline tests: `dotnet test`, then the UI's Vitest tests and type-checks (`./scripts/run-ui-tests.sh`). `./scripts/run-tests-with-explicit.sh` adds the live Open-Meteo tests.
+`./scripts/test-all.sh` runs offline tests: the .NET tests (`./scripts/test-dotnet.sh`), then the UI's Vitest tests and type-checks (`./scripts/test-ui.sh`); each of the two also runs on its own. `./scripts/test-all-with-live.sh` adds the live Open-Meteo tests.
 
 | Level       | Replaced                                                                                                                   |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -266,6 +269,17 @@ Both are set in `appsettings.json` and `appsettings.Development.json` (`Logging:
 Integration tests freeze only "now", with `FixedNowTimeProvider`. The resilience pipeline takes the same `TimeProvider` for its timeouts and retry delays, which a fully fake clock would stop, so requests would hang. The tests also shorten the resilience settings to milliseconds.
 
 Covered: validation boundaries (72 and 73 hours, midnight in UTC+7, extreme dates), the UTC dates sent to Open-Meteo (including just after midnight in UTC+7), the 10-hour window and newest-first order, upstream errors and bad data, the shipped resilience settings, which failures are retried (408, 429, 5xx and connection errors, but not 400 or 404), attempt and total timeouts, the circuit breaker, caching including 20 simultaneous requests, and every status code.
+
+### Coverage
+
+`./scripts/test-all-with-coverage.sh` runs the offline tests with code coverage and fails below a minimum:
+
+| Tests | Measured with                                                                                                   | Minimum                 | Report                      |
+| ----- | --------------------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------- |
+| .NET  | `Microsoft.Testing.Extensions.CodeCoverage`, the three projects merged by ReportGenerator (a local dotnet tool) | 95% lines, 85% branches | `coverage/index.html`       |
+| UI    | Vitest's v8 coverage, in each package                                                                           | 80% of each measure     | `coverage/` in each package |
+
+The .NET minimums are a ratchet, set just under the coverage when they were added (96.3% of lines, 86.6% of branches): raise them as coverage grows, and never lower them to let a change pass. `coverage.config` counts only the four `src/` assemblies, and leaves out generated code: the Kiota client (`[GeneratedCode]`) and what the compiler and source generators write under `obj/` (Razor views, regex, logging). Exclude anything else with `[ExcludeFromCodeCoverage]` and a comment saying why. `coverage/Cobertura.xml` is the merged report for other tools, such as SonarCloud.
 
 ## Container
 
@@ -297,7 +311,8 @@ Quality rules run in the build itself, so they apply the same way in every edito
 | Nullable reference types | Possible null dereferences (`CS86xx`)                                                                                        | `dotnet build`                                                |
 | Vulnerable packages      | Known vulnerabilities in NuGet dependencies (NuGet audit, e.g. `NU1903`)                                                     | `dotnet restore`                                              |
 | Formatting               | Indentation, spacing, LF line endings and `using` order from `.editorconfig`; `.gitattributes` keeps LF in git               | VS Code on format, and `dotnet format whitespace` (see below) |
-| Tests                    | Unit, integration and UI tests, and the UI tests' type-checks                                                                | `./scripts/run-tests.sh`                                      |
+| Tests                    | Unit, integration and UI tests, and the UI tests' type-checks                                                                | `./scripts/test-all.sh`                                       |
+| Coverage                 | .NET at least 95% of lines and 85% of branches; the UI at least 80%                                                          | `./scripts/test-all-with-coverage.sh`                         |
 
 Rule exceptions are made in `.editorconfig`, one rule at a time, with the reason in a comment. Currently there is one: CA1707 is off for `tests/`, so test names can use `Method_Scenario_Expected`.
 

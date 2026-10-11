@@ -493,3 +493,7 @@ storybook-static/
 
 # UI tests (tests/Innovark.Weather.UI)
 tests/Innovark.Weather.UI/*/coverage/
+
+# .NET code coverage (scripts/test-all-with-coverage.sh)
+TestResults/
+/coverage/
