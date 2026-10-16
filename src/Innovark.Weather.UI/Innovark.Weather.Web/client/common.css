@@ -1,0 +1,7 @@
+/* The theme (CSS variables like --background/--primary) and `@import "tailwindcss";` live in the
+   components package's stylesheet, so this app doesn't keep a second copy of the theme. */
+@import "@innovark-weather/components/styles.css";
+
+/* Tailwind doesn't scan node_modules (where the workspace package is linked), so point it at the
+   components' source to keep the classes they use. */
+@source "../../Innovark.Weather.Components/src";

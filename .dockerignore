@@ -1,15 +1,20 @@
 # Only src/ and the root build files are needed to build the image.
 **/bin/
 **/obj/
+**/node_modules/
+**/wwwroot/js/build/
 .git/
 .github/
 .vs/
 .vscode/
 .idea/
 tests/
+# Except the UI tests' manifests: the bun workspace lists those packages (see Dockerfile.web).
+!tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests/package.json
+!tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/package.json
 scripts/
 *.md
 docs/
 docker-compose*.yml
-Dockerfile
+Dockerfile*
 .dockerignore

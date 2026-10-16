@@ -58,8 +58,11 @@ After writing tests for tricky logic, check that they catch bugs: break the code
 | `src/Innovark.Weather.Application/**` | `tests/Innovark.Weather.UnitTests/Application/**` |
 | `src/Innovark.Weather.Infrastructure/**` | `tests/Innovark.Weather.UnitTests/Infrastructure/**` |
 | API endpoints (`src/Innovark.Weather.Api/**`) | `tests/Innovark.Weather.IntegrationTests/**` via `WebApplicationFactory<Program>` |
+| UI components (`src/Innovark.Weather.UI/Innovark.Weather.Components/src/**`) | `tests/Innovark.Weather.UI/Innovark.Weather.Components.Tests/src/**` via Vitest and Testing Library |
+| Web app endpoints and startup (`src/Innovark.Weather.UI/Innovark.Weather.Web/**/*.cs`) | `tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/**` via `WebApplicationFactory<Program>`, with `StubWeatherApiHandler` for the API |
+| Web app pages and client code (`src/Innovark.Weather.UI/Innovark.Weather.Web/{Pages,client}/**/*.{ts,tsx}`) | `tests/Innovark.Weather.UI/Innovark.Weather.Web.Tests/{Pages,client}/**`, mirroring the path, via Vitest and Testing Library |
 
-Folders mirror `src/`, with one test class per class under test, named `<Class>Tests`.
+Folders mirror `src/`, with one test class per class under test, named `<Class>Tests`. Component tests are one `<file>.test.tsx` per source file, mirroring its path without the component's own folder: `components/forms/input/input.tsx` → `components/forms/input.test.tsx`. They own the exhaustive and edge-case coverage; a story's play function only checks its own story in the browser, so don't repeat its assertions.
 
 ## Conventions
 
@@ -70,7 +73,9 @@ Folders mirror `src/`, with one test class per class under test, named `<Class>T
 - Tests against the real Open-Meteo API are `[Fact(Explicit = true)]` with `[Trait("Category", "Live")]`, so they only run on request.
 - Registration methods (`AddApplication`, `AddInfrastructure`) have their own `DependencyInjectionTests`.
 
-Run `./scripts/run-tests.sh` before committing; the build treats warnings as errors.
+Run `./scripts/test-all.sh` before committing: it runs the .NET tests, then the UI's tests and type-checks (`./scripts/test-ui.sh`). The build treats warnings as errors.
+
+`./scripts/test-all-with-coverage.sh` adds code coverage and fails below its minimums (.NET: 95% of lines and 85% of branches; UI: 80%). New code comes with tests that keep coverage at or above them. The .NET minimums are a ratchet: raise them when coverage grows, never lower them to make a change pass. Exclude code only with `[ExcludeFromCodeCoverage]` and a comment saying why.
 
 ## Formatting
 

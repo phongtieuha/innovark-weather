@@ -1,0 +1,35 @@
+{
+  "name": "@innovark-weather/web-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@innovark-weather/components": "workspace:*"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.102.8",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "happy-dom": "^20.14.3",
+    "orval": "^8.39.0",
+    "prettier": "^3.9.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}

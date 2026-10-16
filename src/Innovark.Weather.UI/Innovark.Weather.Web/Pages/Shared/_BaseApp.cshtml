@@ -1,0 +1,27 @@
+@model Innovark.Weather.Web.Models.Base.BaseModel
+
+@if (Model.Data != null)
+{
+    <script>
+        window.siteData = @Json.Serialize(Model.Data);
+    </script>
+}
+
+@if (Model.IsDevelopment)
+{
+    @* Served by the Vite dev server (bun run dev), with React Fast Refresh. *@
+    <script type="module">
+        import RefreshRuntime from 'http://localhost:5173/@@react-refresh'
+        RefreshRuntime.injectIntoGlobalHook(window)
+        window.$RefreshReg$ = () => { }
+        window.$RefreshSig$ = () => (type) => type
+        window.__vite_plugin_react_preamble_installed__ = true
+    </script>
+    <script type="module" src="http://localhost:5173/@@vite/client"></script>
+    <script type="module" src="http://localhost:5173/@Model.JsPath"></script>
+}
+else
+{
+    <link rel="stylesheet" asp-href-include="@Model.CssPath" />
+    <script type="module" asp-src-include="@Model.JsPath"></script>
+}

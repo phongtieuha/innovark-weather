@@ -1,0 +1,18 @@
+node_modules
+bun.lock
+*.tsbuildinfo
+.vite
+[Bb]in
+[Oo]bj
+
+# The .NET project's own files keep their formatting (.editorconfig, dotnet format).
+Innovark.Weather.Web/Properties
+Innovark.Weather.Web/appsettings*.json
+
+# Generated
+Innovark.Weather.Web/WeatherApi
+Innovark.Weather.Web/wwwroot/js/build
+Innovark.Weather.Storybook/public/mockServiceWorker.js
+Innovark.Weather.Storybook/storybook-static
+Innovark.Weather.Web/client/api/generated
+Innovark.Weather.Web/openapi.json
